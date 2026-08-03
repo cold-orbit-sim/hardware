@@ -1,0 +1,151 @@
+<svg viewBox="0 0 1450 1060" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1450" height="1060" fill="#ffffff"/>
+
+  <text x="725" y="28" text-anchor="middle" font-size="22" font-weight="bold" fill="#111827">Cold Orbit — Main Panel POC: Breadboard Wiring Diagram</text>
+  <text x="725" y="50" text-anchor="middle" font-size="13" fill="#6b7280">W5500-EVB-Pico  ·  I2C0 → MCP23017  ·  SPI1 → MCP3008</text>
+
+  <!-- RAILS -->
+  <line x1="40" y1="78" x2="1410" y2="78" stroke="#c0392b" stroke-width="5"/>
+  <text x="45" y="70" font-size="13" font-weight="bold" fill="#c0392b">3.3V RAIL</text>
+  <line x1="40" y1="955" x2="1410" y2="955" stroke="#333333" stroke-width="5"/>
+  <text x="45" y="975" font-size="13" font-weight="bold" fill="#333333">GND RAIL</text>
+
+  <!-- LEGEND -->
+  <rect x="1180" y="15" width="230" height="145" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+  <line x1="1195" y1="32" x2="1219" y2="32" stroke="#c0392b" stroke-width="3"/><text x="1225" y="36" font-size="12" fill="#111827">3.3V</text>
+  <line x1="1195" y1="50" x2="1219" y2="50" stroke="#333333" stroke-width="3"/><text x="1225" y="54" font-size="12" fill="#111827">GND</text>
+  <line x1="1195" y1="68" x2="1219" y2="68" stroke="#2563eb" stroke-width="3"/><text x="1225" y="72" font-size="12" fill="#111827">I2C bus (SDA/SCL)</text>
+  <line x1="1195" y1="86" x2="1219" y2="86" stroke="#059669" stroke-width="3"/><text x="1225" y="90" font-size="12" fill="#111827">SPI bus</text>
+  <line x1="1195" y1="104" x2="1219" y2="104" stroke="#d97706" stroke-width="3"/><text x="1225" y="108" font-size="12" fill="#111827">Digital GPIO signal</text>
+  <line x1="1195" y1="122" x2="1219" y2="122" stroke="#7c3aed" stroke-width="3"/><text x="1225" y="126" font-size="12" fill="#111827">Analog signal</text>
+
+  <!-- PICO BLOCK -->
+  <rect x="70" y="150" width="230" height="430" rx="8" fill="#eef2ff" stroke="#1f2937" stroke-width="2"/>
+  <text x="185" y="175" text-anchor="middle" font-size="14" font-weight="bold" fill="#111827">WIZnet W5500-EVB-Pico</text>
+  <circle cx="70" cy="210" r="4" fill="#c0392b"/><text x="80" y="207" font-size="12" fill="#111827">3V3(OUT)</text>
+  <circle cx="70" cy="245" r="4" fill="#333333"/><text x="80" y="242" font-size="12" fill="#111827">GND</text>
+  <circle cx="300" cy="305" r="4" fill="#2563eb"/><text x="215" y="301" text-anchor="end" font-size="12" fill="#111827">GP4 → I2C0 SDA</text>
+  <circle cx="300" cy="340" r="4" fill="#2563eb"/><text x="215" y="336" text-anchor="end" font-size="12" fill="#111827">GP5 → I2C0 SCL</text>
+  <circle cx="300" cy="385" r="4" fill="#059669"/><text x="215" y="381" text-anchor="end" font-size="12" fill="#111827">GP8 → SPI1 MISO</text>
+  <circle cx="300" cy="415" r="4" fill="#059669"/><text x="215" y="411" text-anchor="end" font-size="12" fill="#111827">GP9 → SPI1 CS</text>
+  <circle cx="300" cy="445" r="4" fill="#059669"/><text x="215" y="441" text-anchor="end" font-size="12" fill="#111827">GP10 → SPI1 SCK</text>
+  <circle cx="300" cy="475" r="4" fill="#059669"/><text x="215" y="471" text-anchor="end" font-size="12" fill="#111827">GP11 → SPI1 MOSI</text>
+  <text x="185" y="520" text-anchor="middle" font-size="11" font-style="italic" fill="#6b7280">GP16–21 = W5500 Ethernet SPI0</text>
+  <text x="185" y="534" text-anchor="middle" font-size="11" font-style="italic" fill="#6b7280">(internal — do not wire)</text>
+
+  <!-- Pico power wiring -->
+  <polyline points="70,210 40,210 40,78" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+  <polyline points="70,245 40,245 40,955" fill="none" stroke="#333333" stroke-width="2.5"/>
+
+  <!-- MCP23017 BLOCK -->
+  <rect x="560" y="150" width="230" height="330" rx="8" fill="#fef3e2" stroke="#1f2937" stroke-width="2"/>
+  <text x="675" y="175" text-anchor="middle" font-size="14" font-weight="bold" fill="#111827">MCP23017 — I2C GPIO Expander</text>
+  <circle cx="560" cy="210" r="4" fill="#c0392b"/><text x="570" y="207" font-size="12" fill="#111827">VDD</text>
+  <circle cx="560" cy="240" r="4" fill="#333333"/><text x="570" y="237" font-size="12" fill="#111827">VSS</text>
+  <circle cx="560" cy="270" r="4" fill="#c0392b"/><text x="570" y="267" font-size="12" fill="#111827">~RESET (tied high)</text>
+  <circle cx="560" cy="305" r="4" fill="#2563eb"/><text x="570" y="302" font-size="12" fill="#111827">SDA</text>
+  <circle cx="560" cy="340" r="4" fill="#2563eb"/><text x="570" y="337" font-size="12" fill="#111827">SCL</text>
+  <circle cx="560" cy="375" r="4" fill="#333333"/><text x="570" y="372" font-size="12" fill="#111827">A0 (addr 0x20)</text>
+  <circle cx="560" cy="400" r="4" fill="#333333"/><text x="570" y="397" font-size="12" fill="#111827">A1 (addr 0x20)</text>
+  <circle cx="560" cy="425" r="4" fill="#333333"/><text x="570" y="422" font-size="12" fill="#111827">A2 (addr 0x20)</text>
+
+  <circle cx="790" cy="210" r="4" fill="#d97706"/><text x="710" y="207" text-anchor="end" font-size="12" fill="#111827">GPA0</text>
+  <circle cx="790" cy="240" r="4" fill="#d97706"/><text x="710" y="237" text-anchor="end" font-size="12" fill="#111827">GPA1</text>
+  <circle cx="790" cy="270" r="4" fill="#d97706"/><text x="710" y="267" text-anchor="end" font-size="12" fill="#111827">GPA2</text>
+  <circle cx="790" cy="300" r="4" fill="#d97706"/><text x="710" y="297" text-anchor="end" font-size="12" fill="#111827">GPA3</text>
+  <circle cx="790" cy="330" r="4" fill="#d97706"/><text x="710" y="327" text-anchor="end" font-size="12" fill="#111827">GPA4</text>
+  <circle cx="790" cy="360" r="4" fill="#d97706"/><text x="710" y="357" text-anchor="end" font-size="12" fill="#111827">GPB0</text>
+  <text x="675" y="450" text-anchor="middle" font-size="11" font-style="italic" fill="#6b7280">+ 7 more digital I/O free (GPA5–7, GPB1–7)</text>
+
+  <!-- MCP3008 BLOCK -->
+  <rect x="560" y="560" width="230" height="320" rx="8" fill="#e6f7f3" stroke="#1f2937" stroke-width="2"/>
+  <text x="675" y="585" text-anchor="middle" font-size="14" font-weight="bold" fill="#111827">MCP3008 — SPI ADC</text>
+  <circle cx="560" cy="610" r="4" fill="#c0392b"/><text x="570" y="607" font-size="12" fill="#111827">VDD</text>
+  <circle cx="560" cy="640" r="4" fill="#c0392b"/><text x="570" y="637" font-size="12" fill="#111827">VREF</text>
+  <circle cx="560" cy="670" r="4" fill="#333333"/><text x="570" y="667" font-size="12" fill="#111827">AGND</text>
+  <circle cx="560" cy="700" r="4" fill="#333333"/><text x="570" y="697" font-size="12" fill="#111827">DGND</text>
+  <circle cx="560" cy="730" r="4" fill="#059669"/><text x="570" y="727" font-size="12" fill="#111827">CLK</text>
+  <circle cx="560" cy="760" r="4" fill="#059669"/><text x="570" y="757" font-size="12" fill="#111827">DOUT</text>
+  <circle cx="560" cy="790" r="4" fill="#059669"/><text x="570" y="787" font-size="12" fill="#111827">DIN</text>
+  <circle cx="560" cy="820" r="4" fill="#059669"/><text x="570" y="817" font-size="12" fill="#111827">CS</text>
+  <circle cx="790" cy="715" r="4" fill="#7c3aed"/><text x="710" y="712" text-anchor="end" font-size="12" fill="#111827">CH0</text>
+  <text x="675" y="858" text-anchor="middle" font-size="11" font-style="italic" fill="#6b7280">+ 7 more analog channels free (CH1–7)</text>
+
+  <!-- Power/GND trunks for MCP23017 + MCP3008 -->
+  <polyline points="495,78 495,640" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="495" y1="210" x2="560" y2="210" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="495" y1="270" x2="560" y2="270" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="495" y1="610" x2="560" y2="610" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="495" y1="640" x2="560" y2="640" stroke="#c0392b" stroke-width="2.5"/>
+
+  <polyline points="510,240 510,955" fill="none" stroke="#333333" stroke-width="2.5"/>
+  <line x1="510" y1="240" x2="560" y2="240" stroke="#333333" stroke-width="2.5"/>
+  <line x1="510" y1="375" x2="560" y2="375" stroke="#333333" stroke-width="2.5"/>
+  <line x1="510" y1="400" x2="560" y2="400" stroke="#333333" stroke-width="2.5"/>
+  <line x1="510" y1="425" x2="560" y2="425" stroke="#333333" stroke-width="2.5"/>
+  <line x1="510" y1="670" x2="560" y2="670" stroke="#333333" stroke-width="2.5"/>
+  <line x1="510" y1="700" x2="560" y2="700" stroke="#333333" stroke-width="2.5"/>
+
+  <!-- I2C wires -->
+  <line x1="300" y1="305" x2="560" y2="305" stroke="#2563eb" stroke-width="2.5"/>
+  <line x1="300" y1="340" x2="560" y2="340" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="430" y="298" text-anchor="middle" font-size="10" fill="#2563eb">+ 4.7kΩ pull-up to 3.3V</text>
+
+  <!-- SPI wires Pico to MCP3008 -->
+  <polyline points="300,385 330,385 330,760 560,760" fill="none" stroke="#059669" stroke-width="2.5"/>
+  <polyline points="300,415 340,415 340,820 560,820" fill="none" stroke="#059669" stroke-width="2.5"/>
+  <polyline points="300,445 350,445 350,730 560,730" fill="none" stroke="#059669" stroke-width="2.5"/>
+  <polyline points="300,475 360,475 360,790 560,790" fill="none" stroke="#059669" stroke-width="2.5"/>
+
+  <!-- PERIPHERALS -->
+  <rect x="1050" y="170" width="280" height="65" rx="6" fill="#f8fafc" stroke="#1f2937" stroke-width="2"/>
+  <text x="1190" y="192" text-anchor="middle" font-size="13" font-weight="bold" fill="#111827">Toggle Switch</text>
+  <text x="1190" y="210" text-anchor="middle" font-size="11" fill="#333333">other terminal → GND rail</text>
+  <circle cx="1050" cy="200" r="4" fill="#d97706"/>
+
+  <rect x="1050" y="255" width="280" height="65" rx="6" fill="#f8fafc" stroke="#1f2937" stroke-width="2"/>
+  <text x="1190" y="277" text-anchor="middle" font-size="13" font-weight="bold" fill="#111827">Pushbutton (momentary)</text>
+  <text x="1190" y="295" text-anchor="middle" font-size="11" fill="#333333">other terminal → GND rail</text>
+  <circle cx="1050" cy="280" r="4" fill="#d97706"/>
+
+  <rect x="1050" y="335" width="280" height="150" rx="6" fill="#f8fafc" stroke="#1f2937" stroke-width="2"/>
+  <text x="1190" y="357" text-anchor="middle" font-size="13" font-weight="bold" fill="#111827">Rotary Encoder</text>
+  <text x="1190" y="373" text-anchor="middle" font-size="10" fill="#6b7280">(KY-040 / EC11 breakout — POC only)</text>
+  <text x="1065" y="400" font-size="11" fill="#333333">A/CLK → GPA2</text>
+  <text x="1065" y="418" font-size="11" fill="#333333">B/DT → GPA3</text>
+  <text x="1065" y="436" font-size="11" fill="#333333">SW → GPA4</text>
+  <text x="1065" y="458" font-size="11" fill="#333333">GND/COM leg → GND rail</text>
+  <text x="1065" y="474" font-size="11" fill="#c0392b">+/VCC leg → 3.3V rail (if present)</text>
+  <circle cx="1050" cy="365" r="4" fill="#d97706"/>
+  <circle cx="1050" cy="400" r="4" fill="#d97706"/>
+  <circle cx="1050" cy="435" r="4" fill="#d97706"/>
+
+  <rect x="1050" y="500" width="280" height="65" rx="6" fill="#f8fafc" stroke="#1f2937" stroke-width="2"/>
+  <text x="1190" y="522" text-anchor="middle" font-size="13" font-weight="bold" fill="#111827">Indicator LED</text>
+  <text x="1190" y="540" text-anchor="middle" font-size="11" fill="#333333">220–330Ω in series · cathode → GND rail</text>
+  <circle cx="1050" cy="525" r="4" fill="#d97706"/>
+
+  <rect x="1050" y="580" width="280" height="90" rx="6" fill="#f8fafc" stroke="#1f2937" stroke-width="2"/>
+  <text x="1190" y="602" text-anchor="middle" font-size="13" font-weight="bold" fill="#111827">10kΩ Linear Potentiometer</text>
+  <text x="1190" y="620" text-anchor="middle" font-size="11" fill="#c0392b">outer leg → 3.3V rail</text>
+  <text x="1190" y="636" text-anchor="middle" font-size="11" fill="#333333">outer leg → GND rail</text>
+  <text x="1190" y="654" text-anchor="middle" font-size="11" fill="#333333">wiper → MCP3008 CH0</text>
+  <circle cx="1050" cy="615" r="4" fill="#7c3aed"/>
+
+  <!-- GPIO signal wires MCP23017 to peripherals -->
+  <polyline points="790,210 950,210 950,200 1050,200" fill="none" stroke="#d97706" stroke-width="2.5"/>
+  <polyline points="790,240 950,240 950,280 1050,280" fill="none" stroke="#d97706" stroke-width="2.5"/>
+  <polyline points="790,270 950,270 950,365 1050,365" fill="none" stroke="#d97706" stroke-width="2.5"/>
+  <polyline points="790,300 950,300 950,400 1050,400" fill="none" stroke="#d97706" stroke-width="2.5"/>
+  <polyline points="790,330 950,330 950,435 1050,435" fill="none" stroke="#d97706" stroke-width="2.5"/>
+  <polyline points="790,360 950,360 950,525 1050,525" fill="none" stroke="#d97706" stroke-width="2.5"/>
+
+  <!-- Analog wire MCP3008 CH0 to pot -->
+  <polyline points="790,715 950,715 950,615 1050,615" fill="none" stroke="#7c3aed" stroke-width="2.5"/>
+
+  <!-- FOOTER NOTES -->
+  <text x="60" y="978" font-size="12" fill="#333333">• I2C0 (SDA/SCL) needs 4.7kΩ pull-up resistors to 3.3V if your MCP23017 breakout doesn't already include them</text>
+  <text x="60" y="996" font-size="12" fill="#333333">• Add a 0.1µF ceramic decoupling capacitor across VDD/GND on each IC, close to the chip</text>
+  <text x="60" y="1014" font-size="12" fill="#333333">• Potentiometer is wired to MCP3008 CH0, not the Pico's own ADC — validates the scalable external-ADC path for future analog-heavy panels</text>
+  <text x="60" y="1032" font-size="12" fill="#333333">• GP16–21 are wired internally to the W5500 for Ethernet SPI — never assign them to other peripherals</text>
+</svg>

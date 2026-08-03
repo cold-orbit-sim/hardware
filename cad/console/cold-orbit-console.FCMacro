@@ -1,0 +1,923 @@
+# -*- coding: utf-8 -*-
+"""
+Cold Orbit - full bridge console.
+FreeCAD parametric macro.  Tools > Macro > Execute.
+
+Builds every panel from section 7 of the master plan as a separate solid,
+placed in its seated-player position.
+
+COORDINATE SYSTEM (mm), player-centric:
+    X   +right / -left, 0 = player centreline
+    Y   +forward, away from the player
+    Z   +up from floor
+Origin (0,0,0) is the floor directly below the player's eye line.
+
+ORIENTATION, given per panel as (yaw, tilt):
+    yaw   rotation about Z.  0 = facing straight back at the player.
+    tilt  0 = vertical.  +ve leans the top away so the face points downward
+          (overhead).  -ve lays it back so the face points upward (consoles).
+
+NOTE: this is still mostly a LAYOUT model - most panels are floating faces,
+no frame, no mounts, no joinery.  The WALLS section is a first, partial
+exception, closing the gap between HOTAS, the tilt-screen, comms and the
+hardpoint panels with real touching geometry, not placeholder boxing:
+  - HOTAS: footprint pinned exactly between the tilt-screen's front edge
+    and the main-screen/comms row, with a triangular Side (flush against
+    the tilt-screen) and rectangular Back (flush against comms).
+  - Propulsion/FTL: no longer flat panels facing the player - each is two
+    flat triangular facets meeting along a diagonal seam, because the four
+    real corners they have to touch (HOTAS, the hardpoint panel, and
+    comms' edge) aren't coplanar. f_propulsion()/f_ftl() still hold the
+    control layout from before this shape change; porting it onto one of
+    the two triangles is unfinished.
+Everything else is still just floating faces; woodwork/joinery proper
+comes later still.
+
+Control legends are etched (shallow pocket) into the front face of each
+panel.  All the wording lives in the LABELS dict - edit it there, nowhere
+else.  Wording follows the v24 doc, section 7.
+"""
+import math
+import os
+
+import FreeCAD as App
+import Part
+
+# ================================================================ PARAMETERS
+# >>> MEASURE AGAINST REAL PARTS BEFORE CUTTING ANYTHING <<<
+PLY_T    = 5.0      # panel thickness
+
+EYE_Z    = 1150.0   # seated eye height above floor
+MAIN_Y   = 750.0    # main panel plane, forward of the player
+Z_SCREEN = EYE_Z - 60.0
+
+SCREEN_W, SCREEN_H = 597.0, 336.0   # 27" visible area   -- MEASURE
+TS_W, TS_H         = 340.0, 190.0   # touchscreen visible area -- MEASURE
+HP_SCREEN          = 140.0          # hardpoint panel screen aperture
+
+# Component hole diameters -- PLACEHOLDERS, verify against real parts
+D_TOGGLE   = 12.0   # toggle switch bushing
+D_BUTTON   = 16.0   # momentary push button
+D_BTN_SM   = 14.0   # small button (hardpoint soft keys)
+D_BTN_LG   = 22.0   # large / illuminated button
+BTN_SQ     = 34.0   # square illuminated button (comms warn/caution + nav)
+D_ESTOP    = 30.0   # emergency stop, SCRAM
+D_LED      = 5.0
+D_LED_SM   = 3.0
+D_KNOB     = 22.0   # rotary knob shaft + bush
+D_ENCODER  = 8.0    # rotary encoder shaft
+D_MOUNT    = 4.5    # M4 clearance
+
+CUT_T = PLY_T * 4.0
+CUT_Z = -PLY_T
+
+# ================================================================ LETTERING
+SHOW_LABELS  = True     # False = plain panels, no etching
+ETCH_D       = 0.6      # etch pocket depth into the front face
+TEXT_GAP     = 3.5      # clear space between a control edge and its legend
+TITLE_INSET  = 6.0      # panel title, in from the panel edge
+
+# Cap heights (mm).  Approximate - the font is scaled so capitals land here.
+TEXT_H_TITLE = 7.0      # panel title
+TEXT_H_HDR   = 5.0      # column / group headers
+TEXT_H       = 3.6      # normal control legend
+TEXT_H_TINY  = 2.4      # cycle arrows, missile-type numerals
+
+CAP_RATIO    = 0.73     # Oswald cap height as a fraction of nominal font size
+                        # (font-specific - adjust if you swap FONT_FILE and the
+                        # etched capitals don't measure TEXT_H)
+
+# Oswald - condensed, which is what keeps the longer legends inside a column.
+# Leave FONT_FILE empty to auto-pick the first candidate that exists.
+# Note: the variable-weight file etches at its default weight; drop a static
+# Oswald-Bold.ttf in and point FONT_FILE at it if you want heavier strokes.
+FONT_FILE       = ""
+FONT_CANDIDATES = [
+    os.path.expanduser("~/Library/Fonts/Oswald-VariableFont_wght.ttf"),
+    os.path.expanduser("~/Library/Fonts/Oswald-Bold.ttf"),
+    os.path.expanduser("~/Library/Fonts/Oswald-Regular.ttf"),
+    "/Library/Fonts/Oswald-VariableFont_wght.ttf",
+    "/usr/share/fonts/truetype/oswald/Oswald-VariableFont_wght.ttf",
+    "C:/Windows/Fonts/Oswald-VariableFont_wght.ttf",
+    # Last-ditch fallbacks so the macro still runs on a machine without Oswald.
+    "/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+]
+
+# ================================================================ LABELS
+# Every word etched on the console.  Wording from v24 sections 7.1 - 7.9.
+LABELS = {
+    # --- 7.1 turrets ---------------------------------------------------
+    "turrets_title":        "TURRETS",
+    "turrets_col_l":        "DORSAL",
+    "turrets_col_r":        "VENTRAL",
+    "turrets_arm":          "ARM",
+    "turrets_ammo":         "AMMO",
+    "turrets_target":       "TARGET",
+    "turrets_target_prev":  "<",
+    "turrets_target_next":  ">",
+    "turrets_lock":         "LOCK",
+    "turrets_reload":       "RELOAD",
+    "turrets_mode":         "FIRE MODE",
+    "turrets_mode_up":      "LETHAL",
+    "turrets_mode_dn":      "NON-LETHAL",
+
+    # --- 7.2 missiles --------------------------------------------------
+    "missiles_title":       "MISSILES",
+    "missiles_col_l":       "FORE",
+    "missiles_col_r":       "AFT",
+    "missiles_arm":         "ARM",
+    "missiles_ammo":        "AMMO TYPE",
+    "missiles_ammo_prev":   "<",
+    "missiles_ammo_next":   ">",
+    "missiles_types":       ("1", "2", "3", "4"),   # per-type indicator dots
+    "missiles_load":        "LOAD",
+    "missiles_target":      "TARGET",
+    "missiles_target_prev": "<",
+    "missiles_target_next": ">",
+    "missiles_lock":        "LOCK",
+    "missiles_fire":        "FIRE",
+
+    # --- 7.3 cameras ---------------------------------------------------
+    # Short forms of the doc's names (External/chase, Dorsal turret cam,
+    # Ventral turret cam, Docking/proximity, Damage inspection).
+    # Left-to-right order is still open in 7.3 - reorder here when it lands.
+    "cameras_title":        "CAMERAS",
+    "cameras_views":        ("FORWARD", "AFT", "CHASE", "DORSAL",
+                             "VENTRAL", "DOCKING", "DAMAGE"),
+
+    # --- 7.4 touchscreen mode select -----------------------------------
+    # Left-to-right order also still open in 7.4.
+    "ts_modes_title":       "MODE SELECT",
+    "ts_modes_modes":       ("ENGINEERING", "PROPULSION", "FTL", "TURRETS",
+                             "MISSILES", "COMMS", "HARDPOINTS"),
+
+    # --- 7.5 comms -----------------------------------------------------
+    # No panel title: master warn/caution and volume are ship-wide, not
+    # comms-specific (7.5) - so the LCD carries the COMMS legend instead.
+    "comms_title":          "",
+    "comms_warn":           "MASTER WARN",
+    "comms_caution":        "MASTER CAUTION",
+    "comms_volume":         "VOLUME",
+    "comms_clock":          "CLOCK",
+    "comms_lcd":            "COMMS",
+    "comms_msg":            "NEW MESSAGE",
+    "comms_up":             "UP",
+    "comms_select":         "SELECT",
+    "comms_down":           "DOWN",
+
+    # --- 7.6 FTL -------------------------------------------------------
+    "ftl_title":            "FTL",
+    "ftl_dest":             "DEST",
+    "ftl_dest_prev":        "<",
+    "ftl_dest_next":        ">",
+    "ftl_arm":              "ARM",
+    "ftl_vector":           "VECTOR",
+    "ftl_jump":             "JUMP",
+
+    # --- 7.7 propulsion ------------------------------------------------
+    "prop_title":           "PROPULSION",
+    "prop_cutoff":          "EMERGENCY CUTOFF",
+    "prop_ignition":        "IGNITION",
+    "prop_arm":             "ARM",
+    "prop_mix":             "PROPELLANT MIX",
+    "prop_mix_lean":        "LEAN",
+    "prop_mix_rich":        "RICH",
+    "prop_temp":            "ENGINE TEMP",
+    "prop_rcs":             "RCS",
+    "prop_reverse":         "REVERSE",
+
+    # --- 7.8 engineering -----------------------------------------------
+    "eng_title":            "ENGINEERING",
+    "eng_row_repair":       "REPAIR",      # row legend, sits in the group gap
+    "eng_row_alloc":        "POWER",       # row legend, allocation encoders
+    "eng_reactor":          "REACTOR",
+    "eng_output":           "OUTPUT",
+    "eng_scram":            "SCRAM",
+    "eng_total":            "TOTAL POWER",
+    "eng_systems":          ("WEAPONS", "ENGINES", "FTL",
+                             "UTIL 1", "UTIL 2", "UTIL 3", "UTIL 4"),
+
+    # --- 7.9 generic hardpoint -----------------------------------------
+    # Soft keys are deliberately unlabelled: 7.9 has the screen render each
+    # key's label beside it, LSK-style.  Fill these in only if you want
+    # etched key indices as well.
+    "hardpoint_title":      "HARDPOINT",
+    "hardpoint_arm":        "ARM",
+    "hardpoint_lcd":        "MODULE ID",
+    "hardpoint_softkeys":   ("", "", "", "", "", "", "", ""),
+
+    # --- panels with nothing to letter ---------------------------------
+    "screen_title":         "",
+    "touchscreen_title":    "",
+    "hotas_title":          "",
+}
+
+# ================================================================ SIZES
+SZ = {
+    "screen":      (687.0, 426.0),
+    "cameras":     (0.0,    90.0),   # width derived below
+    "comms":       (0.0,   150.0),   # width derived below
+    "turrets":     (260.0, 426.0),
+    "missiles":    (260.0, 426.0),
+    "ts_modes":    (400.0,  80.0),
+    "touchscreen": (400.0, 250.0),
+    "hotas":       (200.0, 260.0),
+    "hardpoint":   (260.0,   0.0),   # height derived below
+    "propulsion":  (0.0, 0.0),   # size derived below - fitted into the gap
+    "ftl":         (0.0, 0.0),   # beside HOTAS, under comms/hardpoint
+    "engineering": (700.0, 300.0),
+}
+
+# Cameras and comms both run the full width of the main panel group -
+# turrets + screen + missiles - so they stay flush with them however those
+# three are resized. Their controls stay centred (over the screen); the
+# extra width beyond the screen is deliberate dead space either side.
+_MAIN_GROUP_W = SZ["turrets"][0] + SZ["screen"][0] + SZ["missiles"][0]
+SZ["cameras"] = (_MAIN_GROUP_W, SZ["cameras"][1])
+SZ["comms"]   = (_MAIN_GROUP_W, SZ["comms"][1])
+
+# The 4 hardpoint panels flank turrets/missiles two-a-side, stacked to touch
+# and together reach the same total height as the weapons panels plus
+# cameras and comms above and below them - i.e. top of cameras to bottom of
+# comms, split exactly in half since the pair touches with no gap.
+SZ["hardpoint"] = (SZ["hardpoint"][0],
+                   (SZ["cameras"][1] + SZ["turrets"][1] + SZ["comms"][1]) / 2.0)
+
+
+# ================================================================ LETTERING
+def _resolve_font():
+    """First usable font file, or '' if none of the candidates exist."""
+    for path in [FONT_FILE] + FONT_CANDIDATES:
+        if path and os.path.isfile(path):
+            return path
+    return ""
+
+
+_FONT = _resolve_font() if SHOW_LABELS else ""
+_TEXT_CACHE = {}
+
+doc = App.ActiveDocument or App.newDocument("ColdOrbitConsole")
+
+if SHOW_LABELS and _FONT:
+    import Draft
+    _shapestring = getattr(Draft, "make_shapestring", None) or Draft.makeShapeString
+
+
+def _text_shape(string, cap_h):
+    """Flat character faces on the XY plane, origin at the baseline start."""
+    key = (string, round(cap_h, 4))
+    if key not in _TEXT_CACHE:
+        obj = _shapestring(String=string, FontFile=_FONT,
+                           Size=cap_h / CAP_RATIO, Tracking=0.0)
+        doc.recompute()
+        _TEXT_CACHE[key] = obj.Shape.copy()
+        doc.removeObject(obj.Name)
+    return _TEXT_CACHE[key].copy()
+
+
+# ================================================================ FACE
+class Face(object):
+    """A flat panel built centred on its own local origin."""
+
+    def __init__(self, key):
+        self.w, self.h = SZ[key]
+        self.cuts = []
+        self.texts = []
+
+    # -- cutouts --------------------------------------------------------
+    def hole(self, x, y, dia):
+        self.cuts.append(Part.makeCylinder(
+            dia / 2.0, CUT_T, App.Vector(x, y, CUT_Z)))
+
+    def slot(self, x, y, w, h):
+        self.cuts.append(Part.makeBox(
+            w, h, CUT_T, App.Vector(x - w / 2.0, y - h / 2.0, CUT_Z)))
+
+    def square(self, x, y, size):
+        self.slot(x, y, size, size)
+
+    def row(self, xs, y, dia):
+        for x in xs:
+            self.hole(x, y, dia)
+
+    def mounts(self, inset=15.0):
+        for x in (-self.w / 2 + inset, self.w / 2 - inset):
+            for y in (-self.h / 2 + inset, self.h / 2 - inset):
+                self.hole(x, y, D_MOUNT)
+
+    # -- lettering ------------------------------------------------------
+    def text(self, x, y, string, cap_h=None, halign="center", valign="bottom"):
+        """Etch `string`, positioning its bounding box against (x, y)."""
+        if string:
+            self.texts.append((x, y, string, cap_h or TEXT_H, halign, valign))
+
+    def text_above(self, x, y, clear, string, cap_h=None, halign="center"):
+        """Legend above a control centred on (x, y); `clear` = its half-height."""
+        self.text(x, y + clear + TEXT_GAP, string, cap_h, halign, "bottom")
+
+    def text_below(self, x, y, clear, string, cap_h=None, halign="center"):
+        self.text(x, y - clear - TEXT_GAP, string, cap_h, halign, "top")
+
+    def text_right(self, x, y, clear, string, cap_h=None):
+        self.text(x + clear + TEXT_GAP, y, string, cap_h, "left", "middle")
+
+    def text_left(self, x, y, clear, string, cap_h=None):
+        self.text(x - clear - TEXT_GAP, y, string, cap_h, "right", "middle")
+
+    def title(self, string, cap_h=None, halign="center", top=True,
+              inset=TITLE_INSET, x=None):
+        y = self.h / 2 - inset if top else -self.h / 2 + inset
+        if x is None:
+            x = {"center": 0.0,
+                 "left":  -self.w / 2 + 2 * inset,
+                 "right":  self.w / 2 - 2 * inset}[halign]
+        self.text(x, y, string, cap_h or TEXT_H_TITLE, halign,
+                  "top" if top else "bottom")
+
+    def _etch(self, x, y, string, cap_h, halign, valign):
+        shape = _text_shape(string, cap_h)
+        bb = shape.BoundBox
+        dx = {"left":   x - bb.XMin,
+              "right":  x - bb.XMax,
+              "center": x - (bb.XMin + bb.XMax) / 2.0}[halign]
+        dy = {"bottom": y - bb.YMin,
+              "top":    y - bb.YMax,
+              "middle": y - (bb.YMin + bb.YMax) / 2.0,
+              "baseline": y}[valign]
+        shape.translate(App.Vector(dx, dy, PLY_T - ETCH_D))
+        # Over-extrude past the front face so the boolean always breaks it.
+        return shape.extrude(App.Vector(0, 0, ETCH_D + 1.0))
+
+    # -- output ---------------------------------------------------------
+    def solid(self):
+        blank = Part.makeBox(self.w, self.h, PLY_T,
+                             App.Vector(-self.w / 2, -self.h / 2, 0))
+        cuts = list(self.cuts)
+        if SHOW_LABELS and _FONT:
+            for spec in self.texts:
+                cuts.append(self._etch(*spec))
+        if not cuts:
+            return blank
+        return blank.cut(Part.makeCompound(cuts))
+
+
+def spread(n, pitch):
+    """n evenly spaced coordinates centred on zero."""
+    return [(i - (n - 1) / 2.0) * pitch for i in range(n)]
+
+
+# ================================================================ PANELS
+def f_screen():
+    f = Face("screen")
+    f.slot(0, 0, SCREEN_W, SCREEN_H)
+    f.title(LABELS["screen_title"])
+    f.mounts(22)
+    return f
+
+
+def f_cameras():
+    """7.3 - Fwd, Aft, Chase, Dorsal, Ventral, Docking, Damage.
+    Square backlit buttons - the backlight is the selection indicator,
+    so no separate LED cutout."""
+    f = Face("cameras")
+    L = LABELS
+    xs = spread(7, 90.0)
+    for x, name in zip(xs, L["cameras_views"]):
+        f.square(x, 0.0, BTN_SQ)
+        f.text_above(x, 0.0, BTN_SQ / 2.0, name)
+    f.title(L["cameras_title"], TEXT_H_HDR)
+    f.mounts()
+    return f
+
+
+def f_comms():
+    """7.5 - Master Warn/Caution, Volume, clock, LCD, msg LED, Up/Sel/Down.
+
+    Panel is full main-panel-group width, but the controls stay clustered
+    centrally - dead space at both ends rather than stretched to the edges.
+    Left to right: volume top-left of the cluster, then the Select / Up-Down
+    nav cluster, the LCD it drives, message LED and clock, with Master
+    Warn/Caution on the right. Warn, caution, up, down and select are square
+    illuminated buttons."""
+    f = Face("comms")
+    L = LABELS
+    sq = BTN_SQ / 2.0
+
+    f.hole(-280, 28, D_KNOB)            # master volume, top-left of cluster
+    f.text_above(-280, 28, D_KNOB / 2.0, L["comms_volume"])
+
+    # Nav cluster: Select outboard, Up/Down stacked to the right of it.
+    f.square(-200, 0, BTN_SQ)           # select
+    f.text_above(-200, 0, sq, L["comms_select"])
+    f.square(-150, 22, BTN_SQ)          # up
+    f.text_above(-150, 22, sq, L["comms_up"])
+    f.square(-150, -22, BTN_SQ)         # down
+    f.text_below(-150, -22, sq, L["comms_down"])
+
+    f.slot(0, 0, 190, 42)               # comms LCD
+    f.text_above(0, 0, 21.0, L["comms_lcd"])
+    f.hole(140, 0, D_LED)               # new message
+    f.text_right(140, 0, D_LED / 2.0, L["comms_msg"])
+    f.slot(240, 0, 90, 32)              # 7-seg clock
+    f.text_above(240, 0, 16.0, L["comms_clock"])
+
+    f.square(340, 22, BTN_SQ)           # master warn
+    f.text_above(340, 22, sq, L["comms_warn"])
+    f.square(340, -22, BTN_SQ)          # master caution
+    f.text_below(340, -22, sq, L["comms_caution"])
+
+    f.title(L["comms_title"], TEXT_H_HDR, top=False)
+    f.mounts()
+    return f
+
+
+def f_turrets():
+    """7.1 - dorsal left / ventral right. Arm, Ammo, Target, Lock, Reload."""
+    f = Face("turrets")
+    L = LABELS
+    rows = {"arm": 173, "ammo": 125, "target": 73, "lock": 35, "reload": -13}
+    f.title(L["turrets_title"])
+    for cx, hdr in ((-45.0, L["turrets_col_l"]), (45.0, L["turrets_col_r"])):
+        f.text(cx, 199.0, hdr, TEXT_H_HDR, valign="top")
+
+        f.hole(cx, rows["arm"], D_TOGGLE)
+        f.text_above(cx, rows["arm"], D_TOGGLE / 2.0, L["turrets_arm"])
+
+        f.slot(cx, rows["ammo"], 26, 10)
+        f.text_above(cx, rows["ammo"], 5.0, L["turrets_ammo"])
+
+        f.hole(cx - 22, rows["target"], D_BUTTON)
+        f.hole(cx + 22, rows["target"], D_BUTTON)
+        # Row legend centred, prev/next arrows over their own buttons.
+        f.text_above(cx, rows["target"], D_BUTTON / 2.0, L["turrets_target"])
+        f.text_above(cx - 22, rows["target"], D_BUTTON / 2.0,
+                     L["turrets_target_prev"], TEXT_H_TINY)
+        f.text_above(cx + 22, rows["target"], D_BUTTON / 2.0,
+                     L["turrets_target_next"], TEXT_H_TINY)
+
+        f.hole(cx, rows["lock"], D_LED)
+        # Below, so it clears the target-select legend directly above it.
+        f.text_below(cx, rows["lock"], D_LED / 2.0, L["turrets_lock"])
+
+        f.hole(cx, rows["reload"], D_BUTTON)
+        f.text_above(cx, rows["reload"], D_BUTTON / 2.0, L["turrets_reload"])
+
+    # Shared fire mode: title, then the two switch positions above/below.
+    f.hole(0, -163, D_TOGGLE)
+    f.text_above(0, -163, D_TOGGLE / 2.0, L["turrets_mode_up"])
+    f.text(0, -163 + D_TOGGLE / 2.0 + 2 * TEXT_GAP + TEXT_H,
+           L["turrets_mode"], TEXT_H_HDR, valign="bottom")
+    f.text_below(0, -163, D_TOGGLE / 2.0, L["turrets_mode_dn"])
+    f.mounts()
+    return f
+
+
+def f_missiles():
+    """7.2 - fore left / aft right. Arm, Ammo type, Load, Target, Lock, Fire."""
+    f = Face("missiles")
+    L = LABELS
+    rows = {"arm": 177, "ammo": 129, "load": 83,
+            "target": 37, "lock": 1, "fire": -45}
+    f.title(L["missiles_title"])
+    for cx, hdr in ((-45.0, L["missiles_col_l"]), (45.0, L["missiles_col_r"])):
+        f.text(cx, 199.0, hdr, TEXT_H_HDR, valign="top")
+
+        f.hole(cx, rows["arm"], D_TOGGLE)
+        f.text_above(cx, rows["arm"], D_TOGGLE / 2.0, L["missiles_arm"])
+
+        f.hole(cx - 34, rows["ammo"], D_BUTTON)
+        f.hole(cx + 34, rows["ammo"], D_BUTTON)
+        f.text_above(cx, rows["ammo"], D_BUTTON / 2.0, L["missiles_ammo"])
+        f.text_above(cx - 34, rows["ammo"], D_BUTTON / 2.0,
+                     L["missiles_ammo_prev"], TEXT_H_TINY)
+        f.text_above(cx + 34, rows["ammo"], D_BUTTON / 2.0,
+                     L["missiles_ammo_next"], TEXT_H_TINY)
+        # 4-position type indicator: dot per type, numeral under each dot.
+        for dx, name in zip((-12, -4, 4, 12), L["missiles_types"]):
+            f.hole(cx + dx, rows["ammo"], D_LED_SM)
+            f.text_below(cx + dx, rows["ammo"], D_LED_SM / 2.0, name,
+                         TEXT_H_TINY)
+
+        f.hole(cx, rows["load"], D_BUTTON)
+        f.text_above(cx, rows["load"], D_BUTTON / 2.0, L["missiles_load"])
+
+        f.hole(cx - 22, rows["target"], D_BUTTON)
+        f.hole(cx + 22, rows["target"], D_BUTTON)
+        f.text_above(cx, rows["target"], D_BUTTON / 2.0, L["missiles_target"])
+        f.text_above(cx - 22, rows["target"], D_BUTTON / 2.0,
+                     L["missiles_target_prev"], TEXT_H_TINY)
+        f.text_above(cx + 22, rows["target"], D_BUTTON / 2.0,
+                     L["missiles_target_next"], TEXT_H_TINY)
+
+        f.hole(cx, rows["lock"], D_LED)
+        f.text_below(cx, rows["lock"], D_LED / 2.0, L["missiles_lock"])
+
+        f.hole(cx, rows["fire"], D_BUTTON)
+        f.text_above(cx, rows["fire"], D_BUTTON / 2.0, L["missiles_fire"])
+    f.mounts()
+    return f
+
+
+def f_ts_modes():
+    """7.4 - Engineering, Propulsion, FTL, Turrets, Missiles, Comms, Hardpoints.
+    Square backlit buttons - the backlight is the selection indicator,
+    so no separate LED cutout."""
+    f = Face("ts_modes")
+    L = LABELS
+    xs = spread(7, 52.0)
+    for x, name in zip(xs, L["ts_modes_modes"]):
+        f.square(x, 0.0, BTN_SQ)
+        f.text_above(x, 0.0, BTN_SQ / 2.0, name)
+    f.title(L["ts_modes_title"], TEXT_H_HDR)
+    f.mounts()
+    return f
+
+
+def f_touchscreen():
+    f = Face("touchscreen")
+    f.slot(0, 0, TS_W, TS_H)
+    f.title(LABELS["touchscreen_title"])
+    f.mounts()
+    return f
+
+
+def f_hotas():
+    """Mounting plate only - the HOTAS units themselves are off the shelf."""
+    f = Face("hotas")
+    f.title(LABELS["hotas_title"])
+    f.mounts(20)
+    return f
+
+
+def f_hardpoint():
+    """7.9 - Arm, 16x1 LCD, screen, 8 soft keys, 2 encoders."""
+    f = Face("hardpoint")
+    L = LABELS
+    f.title(L["hardpoint_title"], TEXT_H_HDR, inset=3.0)
+    f.hole(-100, 130, D_TOGGLE)         # guarded arm
+    f.text_above(-100, 130, D_TOGGLE / 2.0, L["hardpoint_arm"])
+    f.slot(35, 130, 92, 20)             # 16x1 module-ID LCD
+    f.text_above(35, 130, 10.0, L["hardpoint_lcd"])
+    f.slot(0, 10, HP_SCREEN, HP_SCREEN)
+    # Soft keys: label text comes from the screen beside each key (7.9), so
+    # LABELS["hardpoint_softkeys"] is blank by default and etches nothing.
+    keys = iter(L["hardpoint_softkeys"])
+    for y in (70, 25, -20, -65):
+        f.square(-105, y, D_BTN_SM)
+        f.text_left(-105, y, D_BTN_SM / 2.0, next(keys, ""), TEXT_H_TINY)
+        f.square(105, y, D_BTN_SM)
+        f.text_right(105, y, D_BTN_SM / 2.0, next(keys, ""), TEXT_H_TINY)
+    # Encoders - no ENC label, just the shaft holes, set a bit higher than
+    # the old position so they clear the bottom soft-key row more generously.
+    f.hole(-50, -100, D_ENCODER)
+    f.hole(50, -100, D_ENCODER)
+    f.mounts()
+    return f
+
+
+# NOT CURRENTLY WIRED INTO LAYOUT. Propulsion/FTL are now an angled,
+# non-rectangular fit (2 triangular facets each - see the WALLS section),
+# not a flat yaw/tilt Face, so this control layout - built for a flat
+# 204x189 rectangle - no longer has a panel to sit on. Kept rather than
+# deleted: the control set/positions are still the right starting point
+# once one of the two triangular facets is picked to carry them.
+def f_propulsion():
+    """7.7 - Emer stop, Ignition, Mix, Temp, Arm, RCS, Reverse.
+    Compact 2-column grid - sized to fit flush into the gap beside HOTAS,
+    not the wider footprint the original 3-across layout assumed."""
+    f = Face("propulsion")
+    L = LABELS
+    f.title(L["prop_title"])
+    f.hole(-50, 55, D_ESTOP)            # emergency cutoff
+    f.text_above(-50, 55, D_ESTOP / 2.0, L["prop_cutoff"])
+    f.hole(50, 55, D_TOGGLE)            # arm
+    f.text_above(50, 55, D_TOGGLE / 2.0, L["prop_arm"])
+    f.hole(-50, 15, D_KNOB)             # ignition
+    f.text_above(-50, 15, D_KNOB / 2.0, L["prop_ignition"])
+    f.hole(50, 15, D_KNOB)              # propellant mix
+    f.text_above(50, 15, D_KNOB / 2.0, L["prop_mix"])
+    f.text_left(50, 15, D_KNOB / 2.0, L["prop_mix_lean"])
+    f.text_right(50, 15, D_KNOB / 2.0, L["prop_mix_rich"])
+    f.slot(0, -20, 70, 14)              # engine temp bargraph
+    f.text_above(0, -20, 7.0, L["prop_temp"])
+    f.hole(-50, -55, D_BUTTON)          # RCS
+    f.text_above(-50, -55, D_BUTTON / 2.0, L["prop_rcs"])
+    f.hole(50, -55, D_BUTTON)           # reverse thrust
+    f.text_above(50, -55, D_BUTTON / 2.0, L["prop_reverse"])
+    f.mounts()
+    return f
+
+
+def f_ftl():
+    """7.6 - Dest prev/next left column; Arm, VECTOR, Jump right column.
+    Resized to fit flush into the gap beside HOTAS (see the SZ["ftl"]
+    derivation) - same layout pattern as before, just tightened up."""
+    f = Face("ftl")
+    L = LABELS
+    f.title(L["ftl_title"])
+    f.hole(-65, 55, D_BUTTON)           # dest prev
+    f.hole(-35, 55, D_BUTTON)           # dest next
+    f.text_above(-50, 55, D_BUTTON / 2.0, L["ftl_dest"])
+    f.text_above(-65, 55, D_BUTTON / 2.0, L["ftl_dest_prev"], TEXT_H_TINY)
+    f.text_above(-35, 55, D_BUTTON / 2.0, L["ftl_dest_next"], TEXT_H_TINY)
+    f.hole(50, 55, D_TOGGLE)            # arm
+    f.text_above(50, 55, D_TOGGLE / 2.0, L["ftl_arm"])
+    f.hole(50, 0, D_BTN_LG)             # VECTOR
+    f.text_above(50, 0, D_BTN_LG / 2.0, L["ftl_vector"])
+    f.hole(50, -55, D_BTN_LG)           # jump
+    f.text_above(50, -55, D_BTN_LG / 2.0, L["ftl_jump"])
+    f.mounts()
+    return f
+
+
+def f_engineering():
+    """7.8 - reactor group left, then 7 system columns.
+    Repair buttons on top row, allocation encoders below."""
+    f = Face("engineering")
+    L = LABELS
+    # Title goes top-left; centre-top is taken by the total-power gauge.
+    # x is set explicitly to clear the top-left mounting hole.
+    f.title(L["eng_title"], halign="left", x=-300.0)
+    # reactor group
+    f.hole(-310, 90, D_BUTTON)          # reactor repair priority
+    f.text_above(-310, 90, D_BUTTON / 2.0, L["eng_reactor"], TEXT_H_HDR)
+    f.hole(-310, -40, D_KNOB)           # reactor output
+    f.text_above(-310, -40, D_KNOB / 2.0, L["eng_output"])
+    f.hole(-310, -125, D_ESTOP)         # SCRAM
+    f.text_above(-310, -125, D_ESTOP / 2.0, L["eng_scram"], TEXT_H_HDR)
+    # Row legends sit in the deliberate gap between reactor group and systems.
+    f.text(-255, 90, L["eng_row_repair"], halign="center", valign="middle")
+    f.text(-255, -40, L["eng_row_alloc"], halign="center", valign="middle")
+    # 7 systems: Weapons, Engines, FTL, Utility 1-4
+    for x, name in zip([-200 + i * 85.0 for i in range(7)], L["eng_systems"]):
+        f.hole(x, 90, D_BUTTON)         # repair priority
+        f.hole(x, -40, D_ENCODER)       # allocation encoder
+        # One legend per column - it names the whole vertical stack.
+        f.text_below(x, -40, D_ENCODER / 2.0, name)
+    f.slot(55, 138, 200, 20)            # total power available
+    f.text_below(55, 138, 10.0, L["eng_total"])
+    f.mounts()
+    return f
+
+
+# ================================================================ LAYOUT
+_sw, _sh = SZ["screen"]
+Z_CAM   = Z_SCREEN + _sh / 2 + SZ["cameras"][1] / 2
+Z_COMMS = Z_SCREEN - _sh / 2 - SZ["comms"][1] / 2
+X_SIDE  = _sw / 2 + SZ["turrets"][0] / 2
+
+TS_TILT = -55.0
+_a = math.radians(90.0 + TS_TILT)
+UP_Y, UP_Z = math.cos(_a), math.sin(_a)
+# Top anchor = comms' own bottom-front edge, so the tilt-screen console's top
+# edge actually touches comms rather than floating near it at an arbitrary
+# offset. Comms front face sits at MAIN_Y - PLY_T (see f_screen's Y-facing
+# convention); comms bottom edge is the same expression used for HP_Z_BOT.
+TS_TOP_Y = MAIN_Y - PLY_T
+TS_TOP_Z = Z_COMMS - SZ["comms"][1] / 2.0
+
+
+def down_slope(d):
+    return (TS_TOP_Y - UP_Y * d, TS_TOP_Z - UP_Z * d)
+
+
+_y, _z = down_slope(SZ["ts_modes"][1] / 2)
+TS_MODES_POS = (0.0, _y, _z)
+_y, _z = down_slope(SZ["ts_modes"][1] + SZ["touchscreen"][1] / 2)
+TS_POS = (0.0, _y, _z)
+TS_DEPTH = SZ["ts_modes"][1] + SZ["touchscreen"][1]   # total slope run, d=0..TS_DEPTH
+TS_EDGE_X = SZ["touchscreen"][0] / 2.0                 # == ts_modes half-width too
+TS_Y_BOT, TS_Z_BOT = down_slope(TS_DEPTH)              # tilt-screen's own front/bottom edge
+
+# HOTAS deck: back edge in line with the main screen/comms row, front edge
+# at the tilt-screen's own front edge - nothing needs to sit forward of that
+# point. Depth is therefore derived, not a fixed constant. X is derived too:
+# the deck's inner edge has to land exactly on TS_EDGE_X, or the Side
+# triangle (flush against the tilt-screen there) won't be flush with the
+# deck itself. Z is derived the same way: the deck's underside (local z=0,
+# which is world Z=pos.z here since tilt=-90/yaw=0 leave X,Y,Z unrotated)
+# sits level with the tilt-screen's own front-bottom edge - the same point
+# the Side triangle's base and the Back rectangle's bottom edge both sit on.
+HOTAS_X = TS_EDGE_X + SZ["hotas"][0] / 2.0
+HOTAS_Z = TS_Z_BOT
+HOTAS_Y = (TS_Y_BOT + TS_TOP_Y) / 2.0
+SZ["hotas"] = (SZ["hotas"][0], TS_TOP_Y - TS_Y_BOT)
+
+# Hardpoint panels stack to span top-of-cameras to bottom-of-comms (see the
+# SZ["hardpoint"] height derivation above), and angle outward for viewing
+# like the console's other side consoles - the pivot sits on the turret's
+# outer edge, so the panel's *inner* edge stays flush with it as it yaws.
+HP_W, HP_H = SZ["hardpoint"]
+HP_YAW = 50.0
+_r = math.radians(HP_YAW)
+_pivot_x = X_SIDE + SZ["turrets"][0] / 2      # turret/missile outer edge
+HP_X = _pivot_x + math.cos(_r) * HP_W / 2
+HP_Y = MAIN_Y - math.sin(_r) * HP_W / 2
+HP_Z_TOP = (Z_CAM + SZ["cameras"][1] / 2) - HP_H / 2
+HP_Z_BOT = (Z_COMMS - SZ["comms"][1] / 2) + HP_H / 2
+
+# Propulsion/FTL fill the gap either side of HOTAS - see the WALLS section
+# below for the actual (angled, non-rectangular) shape. _hotas_outer_x is
+# needed there too, so it's kept as a named constant here.
+_hotas_outer_x = HOTAS_X + SZ["hotas"][0] / 2.0
+
+# name, builder, (x, y, z), yaw, tilt
+LAYOUT = [
+    ("PanelScreen",      f_screen,      (0.0, MAIN_Y, Z_SCREEN),    0.0,   0.0),
+    ("PanelCameras",     f_cameras,     (0.0, MAIN_Y, Z_CAM),       0.0,   0.0),
+    ("PanelComms",       f_comms,       (0.0, MAIN_Y, Z_COMMS),     0.0,   0.0),
+    ("PanelTurrets",     f_turrets,     (-X_SIDE, MAIN_Y, Z_SCREEN), 0.0,  0.0),
+    ("PanelMissiles",    f_missiles,    (X_SIDE, MAIN_Y, Z_SCREEN),  0.0,  0.0),
+
+    ("PanelTsModes",     f_ts_modes,    TS_MODES_POS,               0.0, TS_TILT),
+    ("PanelTouchscreen", f_touchscreen, TS_POS,                     0.0, TS_TILT),
+
+    ("MountHotasLeft",   f_hotas,       (-HOTAS_X, HOTAS_Y, HOTAS_Z), 0.0, -90.0),
+    ("MountHotasRight",  f_hotas,       ( HOTAS_X, HOTAS_Y, HOTAS_Z), 0.0, -90.0),
+
+    ("PanelHardpoint1",  f_hardpoint,   (-HP_X, HP_Y, HP_Z_TOP),    HP_YAW, 0.0),
+    ("PanelHardpoint2",  f_hardpoint,   (-HP_X, HP_Y, HP_Z_BOT),    HP_YAW, 0.0),
+    ("PanelHardpoint3",  f_hardpoint,   ( HP_X, HP_Y, HP_Z_TOP),   -HP_YAW, 0.0),
+    ("PanelHardpoint4",  f_hardpoint,   ( HP_X, HP_Y, HP_Z_BOT),   -HP_YAW, 0.0),
+
+    # Propulsion/FTL are no longer simple flat yaw/tilt panels - they're
+    # built as shaped, angled pieces in the WALLS section below.
+
+    ("PanelEngineering", f_engineering, (0.0, 300.0, EYE_Z + 500.0), 0.0,  65.0),
+]
+
+
+def placement(pos, yaw, tilt):
+    """Local +Z (face normal) ends up pointing back at the player."""
+    rot = (App.Rotation(App.Vector(0, 0, 1), yaw)
+           .multiply(App.Rotation(App.Vector(1, 0, 0), 90.0 + tilt)))
+    return App.Placement(App.Vector(*pos), rot)
+
+
+# ================================================================ WALLS
+# FIRST DRAFT - connecting the floating faces above into physical units.
+# HOTAS's Side/Back and Propulsion/FTL's two triangular facets are all
+# built as raw Part shapes here rather than via the yaw/tilt Face system,
+# since none of them are flat panels facing the player.
+#
+# The HOTAS deck's whole footprint now runs exactly from the tilt-screen's
+# front edge back to the main-screen/comms row (see the HOTAS_Y/SZ["hotas"]
+# derivation above) - nothing sits forward of the tilt-screen's front edge.
+# That makes both connector panels fully pinned by real geometry, no
+# placeholder drop height needed:
+#   Side - a right triangle. Its hypotenuse runs exactly along the tilt-
+#          screen console's side edge (same maths as down_slope() above),
+#          its base sits level with the screen's own front-bottom corner,
+#          and its face plane is flush at x = +-TS_EDGE_X.
+#   Back - a plain rectangle, flush against comms' front face, sharing its
+#          inner edge with the Side triangle's vertical edge.
+HOTAS_W = SZ["hotas"][0]
+COMMS_FRONT_Y = TS_TOP_Y    # comms' front face - same value the tilt-screen
+COMMS_BOTTOM_Z = TS_TOP_Z   # console now touches (see the TS_TOP_* fix above)
+
+
+def wall_box(x0, y0, z0, dx, dy, dz):
+    return Part.makeBox(dx, dy, dz, App.Vector(x0, y0, z0))
+
+
+def hotas_side(sign):
+    """Right triangle flush against the tilt-screen console's side edge -
+    the hypotenuse (front -> back-top) lies exactly on that edge."""
+    front    = (TS_Y_BOT,      TS_Z_BOT)
+    back_top = (COMMS_FRONT_Y, COMMS_BOTTOM_Z)
+    back_bot = (COMMS_FRONT_Y, TS_Z_BOT)
+    x = sign * TS_EDGE_X
+    pts = [App.Vector(x, y, z) for (y, z) in (front, back_top, back_bot, front)]
+    face = Part.Face(Part.makePolygon(pts))
+    return face.extrude(App.Vector(sign * PLY_T, 0, 0))
+
+
+def hotas_back(sign):
+    """Rectangle flush against comms' front face, sharing its inner edge
+    with the Side triangle's vertical (back_top -> back_bot) edge."""
+    cx = sign * HOTAS_X
+    x_lo, x_hi = sorted((cx + sign * HOTAS_W / 2.0, sign * TS_EDGE_X))
+    return wall_box(x_lo, COMMS_FRONT_Y - PLY_T, TS_Z_BOT,
+                    x_hi - x_lo, PLY_T, COMMS_BOTTOM_Z - TS_Z_BOT)
+
+
+def hotas_walls(sign, name):
+    return {name + "Side": hotas_side(sign), name + "Back": hotas_back(sign)}
+
+
+# Propulsion/FTL fill the remaining gap outboard of HOTAS. Four real corners
+# pin this shape - not a rectangle, and not flat against the player:
+#   P1 front-inner - HOTAS's own front-outer corner (touches the deck/Side)
+#   P2 front-outer - the hardpoint panel's own outside-bottom corner
+#   P3 back-outer  - comms' outer edge, which is also the hardpoint pivot
+#                    edge (_pivot_x) - both already coincide there
+#   P4 back-inner  - HOTAS's back-outer corner (the Back rectangle's own
+#                    far corner)
+# P1..P4 are NOT coplanar (checked: the scalar triple product is nowhere
+# near zero), so this can't be one flat panel. Plywood can't take a true
+# ruled twist either, so it's built as two flat triangular facets meeting
+# along the P1-P3 seam:
+#   Back  triangle = P1, P4, P3 - its two outer edges are flush against
+#           HOTAS (P1-P4) and against comms' bottom edge (P4-P3).
+#   Front triangle = P1, P3, P2 - shares the P1-P3 seam with Back, and its
+#           P3-P2 edge is flush under the hardpoint panel. P2-P1 is the new
+#           "front" edge - the one boundary here that isn't flush against
+#           an existing neighbour, since nothing occupies that space yet.
+def _hp_outer_bottom(sign):
+    """The hardpoint panel's own outside-bottom corner (world coords)."""
+    yaw = -sign * HP_YAW
+    r = math.radians(yaw)
+    lx, ly = sign * HP_W / 2.0, -HP_H / 2.0     # local: outer edge, bottom
+    wx = sign * HP_X + lx * math.cos(r) + PLY_T * math.sin(r)
+    wy = HP_Y + lx * math.sin(r) - PLY_T * math.cos(r)
+    wz = HP_Z_BOT + ly
+    return (wx, wy, wz)
+
+
+def _tri_panel(p1, p2, p3, thickness=PLY_T):
+    """Flat triangular solid through 3 real 3D points, thickness split
+    evenly either side of the geometric face so the extrude direction's
+    sign doesn't matter."""
+    wire = Part.makePolygon([App.Vector(*p1), App.Vector(*p2),
+                             App.Vector(*p3), App.Vector(*p1)])
+    face = Part.Face(wire)
+    e1 = App.Vector(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
+    e2 = App.Vector(p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2])
+    n = e1.cross(e2)
+    n.normalize()
+    face.translate(n * (-thickness / 2.0))
+    return face.extrude(n * thickness)
+
+
+def propulsion_ftl_walls(sign, name):
+    p1 = (sign * _hotas_outer_x, TS_Y_BOT, TS_Z_BOT)
+    p2 = _hp_outer_bottom(sign)
+    p3 = (sign * _pivot_x, TS_TOP_Y, TS_TOP_Z)
+    p4 = (sign * _hotas_outer_x, TS_TOP_Y, TS_TOP_Z)
+    return {name + "Back": _tri_panel(p1, p4, p3),
+            name + "Front": _tri_panel(p1, p3, p2)}
+
+
+WALLS = {}
+WALLS.update(hotas_walls(-1, "HotasLeft"))
+WALLS.update(hotas_walls(1, "HotasRight"))
+WALLS.update(propulsion_ftl_walls(-1, "Propulsion"))
+WALLS.update(propulsion_ftl_walls(1, "Ftl"))
+
+
+# ================================================================ BUILD
+_objs = {}
+for name, builder, pos, yaw, tilt in LAYOUT:
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = builder().solid()
+    obj.Placement = placement(pos, yaw, tilt)
+    _objs[name] = obj
+
+for name, shape in WALLS.items():
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = shape
+    _objs[name] = obj
+
+doc.recompute()
+
+# Real (FreeCAD-measured, not eyeballed) clearances between the HOTAS boxes
+# and their neighbours - this is what should drive the next connector pass.
+def _gap(a, b):
+    return _objs[a].Shape.distToShape(_objs[b].Shape)[0]
+
+
+App.Console.PrintMessage("\nHOTAS connector contact check (mm, want ~0):\n")
+for a, b in [("HotasLeftSide",  "PanelTouchscreen"),
+             ("HotasLeftBack",  "PanelComms"),
+             ("HotasRightSide", "PanelTouchscreen"),
+             ("HotasRightBack", "PanelComms")]:
+    App.Console.PrintMessage("  %-16s -> %-16s  %6.1f\n" % (a, b, _gap(a, b)))
+
+App.Console.PrintMessage("\nPropulsion/FTL connector contact check (mm, want ~0):\n")
+for a, b in [("PropulsionBack",  "MountHotasLeft"),
+             ("PropulsionBack",  "PanelComms"),
+             ("PropulsionFront", "PanelHardpoint2"),
+             ("FtlBack",         "MountHotasRight"),
+             ("FtlBack",         "PanelComms"),
+             ("FtlFront",        "PanelHardpoint4")]:
+    App.Console.PrintMessage("  %-16s -> %-16s  %6.1f\n" % (a, b, _gap(a, b)))
+
+try:
+    import FreeCADGui
+    FreeCADGui.SendMsgToActiveView("ViewFit")
+    FreeCADGui.activeDocument().activeView().viewAxonometric()
+except Exception:
+    pass
+
+App.Console.PrintMessage(
+    "Cold Orbit console: %d panels, %.1f mm ply\n" % (len(LAYOUT), PLY_T))
+App.Console.PrintMessage(
+    "Player eye reference: (0, 0, %.0f)\n" % EYE_Z)
+if SHOW_LABELS and not _FONT:
+    App.Console.PrintWarning(
+        "No font found - panels built without etched labels, set FONT_FILE\n")
+elif SHOW_LABELS:
+    App.Console.PrintMessage(
+        "Labels etched %.1f mm deep using %s\n" % (ETCH_D, _FONT))
