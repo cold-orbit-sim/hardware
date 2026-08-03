@@ -186,6 +186,7 @@ LABELS = {
     "prop_mix_rich":        "RICH",
     "prop_temp":            "ENGINE TEMP",
     "prop_rcs":             "RCS",
+    "prop_dampeners":       "DAMPENERS",
     "prop_reverse":         "REVERSE",
 
     # --- 7.8 engineering -----------------------------------------------
@@ -584,9 +585,16 @@ def f_hardpoint():
 # deleted: the control set/positions are still the right starting point
 # once one of the two triangular facets is picked to carry them.
 def f_propulsion():
-    """7.7 - Emer stop, Ignition, Mix, Temp, Arm, RCS, Reverse.
+    """7.7 - Emer stop, Ignition, Mix, Temp, Arm, RCS, Dampeners, Reverse.
     Compact 2-column grid - sized to fit flush into the gap beside HOTAS,
-    not the wider footprint the original 3-across layout assumed."""
+    not the wider footprint the original 3-across layout assumed.
+    Bottom row reads as one flight-behaviour group: RCS, inertial dampeners,
+    reverse thrust - left/centre/right. RCS and reverse were already split
+    left/right on this row with a free centre slot, so the dampeners toggle
+    drops straight in rather than displacing engine temp, which sits on its
+    own row above and is unaffected. Dampeners is a plain on/off toggle -
+    no LED, since the toggle's own position shows its state - and, like
+    every other control on this panel, is inert until Arm is thrown."""
     f = Face("propulsion")
     L = LABELS
     f.title(L["prop_title"])
@@ -604,6 +612,8 @@ def f_propulsion():
     f.text_above(0, -20, 7.0, L["prop_temp"])
     f.hole(-50, -55, D_BUTTON)          # RCS
     f.text_above(-50, -55, D_BUTTON / 2.0, L["prop_rcs"])
+    f.hole(0, -55, D_TOGGLE)            # inertial dampeners
+    f.text_above(0, -55, D_TOGGLE / 2.0, L["prop_dampeners"])
     f.hole(50, -55, D_BUTTON)           # reverse thrust
     f.text_above(50, -55, D_BUTTON / 2.0, L["prop_reverse"])
     f.mounts()
