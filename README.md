@@ -20,6 +20,7 @@ drilled or assembled yet — **every dimension is provisional.**
 cad/
   console/        full bridge assembly — all 16 panels in 3D space
   main-panel/     turrets / screen surround / missiles face plates
+wiring/           breadboard / schematic diagrams for electronics POCs
 docs/             design notes
 ```
 
@@ -43,6 +44,12 @@ docs/             design notes
 | `preview-split.png` | The three panels shown assembled |
 
 DXF layers: `OUTLINE`, `CUTOUTS`, `HOLES`, `MOUNT`, `TEXT`.
+
+### `wiring/`
+
+| File | What it is |
+|---|---|
+| `main_panel_poc_breadboard_wiring.svg` | Main panel electronics POC: breadboard wiring for a WIZnet W5500-EVB-Pico driving an MCP23017 (I2C GPIO expander) and MCP3008 (SPI ADC), wired to a toggle switch, pushbutton, rotary encoder, indicator LED and potentiometer. Bench-tested and confirmed working over this exact wiring. |
 
 ## Running the FreeCAD macros
 
