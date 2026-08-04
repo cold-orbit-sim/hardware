@@ -25,11 +25,17 @@ hardpoint panels with real touching geometry, not placeholder boxing:
     and the main-screen/comms row, with a triangular Side (flush against
     the tilt-screen) and rectangular Back (flush against comms).
   - Propulsion/FTL: no longer flat panels facing the player - each is two
-    flat triangular facets meeting along a diagonal seam, because the four
-    real corners they have to touch (HOTAS, the hardpoint panel, and
-    comms' edge) aren't coplanar. f_propulsion()/f_ftl() still hold the
-    control layout from before this shape change; porting it onto one of
-    the two triangles is unfinished.
+    flat triangular facets (Back/Front) meeting along a diagonal seam,
+    because the four real corners they have to touch (HOTAS, the hardpoint
+    panel, and comms' edge) aren't coplanar. Both facets carry real
+    controls now, via TriPanel (WALLS section) - a Face authored in a
+    local (u,v) grid, same as every other panel, then mapped onto the
+    triangle and trimmed to it.
+  - Engineering: sized to the same width as cameras, so its outer corners
+    share a point with both cameras' top corners and the top hardpoint
+    panels' inner-top corner. Outboard of that shared point, engineering's
+    own angled face and the hardpoint panels' outward yaw diverge - closed
+    with a plain triangular TriPanel fill per side (EngLeftFill/RightFill).
 Everything else is still just floating faces; woodwork/joinery proper
 comes later still.
 
@@ -186,6 +192,7 @@ LABELS = {
     "prop_mix_rich":        "RICH",
     "prop_temp":            "ENGINE TEMP",
     "prop_rcs":             "RCS",
+    "prop_dampeners":       "DAMPENERS",
     "prop_reverse":         "REVERSE",
 
     # --- 7.8 engineering -----------------------------------------------
@@ -225,9 +232,9 @@ SZ = {
     "touchscreen": (400.0, 250.0),
     "hotas":       (200.0, 260.0),
     "hardpoint":   (260.0,   0.0),   # height derived below
-    "propulsion":  (0.0, 0.0),   # size derived below - fitted into the gap
-    "ftl":         (0.0, 0.0),   # beside HOTAS, under comms/hardpoint
-    "engineering": (700.0, 300.0),
+    # Propulsion/FTL aren't flat Face panels any more - see TriPanel in the
+    # WALLS section, sized directly from real touch-point geometry there.
+    "engineering": (0.0,   300.0),   # width derived below
 }
 
 # Cameras and comms both run the full width of the main panel group -
@@ -237,6 +244,13 @@ SZ = {
 _MAIN_GROUP_W = SZ["turrets"][0] + SZ["screen"][0] + SZ["missiles"][0]
 SZ["cameras"] = (_MAIN_GROUP_W, SZ["cameras"][1])
 SZ["comms"]   = (_MAIN_GROUP_W, SZ["comms"][1])
+# Engineering now spans the same width as cameras, so its own outer corners
+# land exactly on cameras' top corners - which is also where the top
+# hardpoint panels' inner-top corner pivots (_pivot_x, set up below, works
+# out equal to _MAIN_GROUP_W / 2). See the EngLeftFill/EngRightFill triangles
+# in the WALLS section for the gap that opens up outboard of that shared
+# corner, between engineering's angled face and the hardpoint panels' yaw.
+SZ["engineering"] = (_MAIN_GROUP_W, SZ["engineering"][1])
 
 # The 4 hardpoint panels flank turrets/missiles two-a-side, stacked to touch
 # and together reach the same total height as the weapons panels plus
@@ -577,61 +591,6 @@ def f_hardpoint():
     return f
 
 
-# NOT CURRENTLY WIRED INTO LAYOUT. Propulsion/FTL are now an angled,
-# non-rectangular fit (2 triangular facets each - see the WALLS section),
-# not a flat yaw/tilt Face, so this control layout - built for a flat
-# 204x189 rectangle - no longer has a panel to sit on. Kept rather than
-# deleted: the control set/positions are still the right starting point
-# once one of the two triangular facets is picked to carry them.
-def f_propulsion():
-    """7.7 - Emer stop, Ignition, Mix, Temp, Arm, RCS, Reverse.
-    Compact 2-column grid - sized to fit flush into the gap beside HOTAS,
-    not the wider footprint the original 3-across layout assumed."""
-    f = Face("propulsion")
-    L = LABELS
-    f.title(L["prop_title"])
-    f.hole(-50, 55, D_ESTOP)            # emergency cutoff
-    f.text_above(-50, 55, D_ESTOP / 2.0, L["prop_cutoff"])
-    f.hole(50, 55, D_TOGGLE)            # arm
-    f.text_above(50, 55, D_TOGGLE / 2.0, L["prop_arm"])
-    f.hole(-50, 15, D_KNOB)             # ignition
-    f.text_above(-50, 15, D_KNOB / 2.0, L["prop_ignition"])
-    f.hole(50, 15, D_KNOB)              # propellant mix
-    f.text_above(50, 15, D_KNOB / 2.0, L["prop_mix"])
-    f.text_left(50, 15, D_KNOB / 2.0, L["prop_mix_lean"])
-    f.text_right(50, 15, D_KNOB / 2.0, L["prop_mix_rich"])
-    f.slot(0, -20, 70, 14)              # engine temp bargraph
-    f.text_above(0, -20, 7.0, L["prop_temp"])
-    f.hole(-50, -55, D_BUTTON)          # RCS
-    f.text_above(-50, -55, D_BUTTON / 2.0, L["prop_rcs"])
-    f.hole(50, -55, D_BUTTON)           # reverse thrust
-    f.text_above(50, -55, D_BUTTON / 2.0, L["prop_reverse"])
-    f.mounts()
-    return f
-
-
-def f_ftl():
-    """7.6 - Dest prev/next left column; Arm, VECTOR, Jump right column.
-    Resized to fit flush into the gap beside HOTAS (see the SZ["ftl"]
-    derivation) - same layout pattern as before, just tightened up."""
-    f = Face("ftl")
-    L = LABELS
-    f.title(L["ftl_title"])
-    f.hole(-65, 55, D_BUTTON)           # dest prev
-    f.hole(-35, 55, D_BUTTON)           # dest next
-    f.text_above(-50, 55, D_BUTTON / 2.0, L["ftl_dest"])
-    f.text_above(-65, 55, D_BUTTON / 2.0, L["ftl_dest_prev"], TEXT_H_TINY)
-    f.text_above(-35, 55, D_BUTTON / 2.0, L["ftl_dest_next"], TEXT_H_TINY)
-    f.hole(50, 55, D_TOGGLE)            # arm
-    f.text_above(50, 55, D_TOGGLE / 2.0, L["ftl_arm"])
-    f.hole(50, 0, D_BTN_LG)             # VECTOR
-    f.text_above(50, 0, D_BTN_LG / 2.0, L["ftl_vector"])
-    f.hole(50, -55, D_BTN_LG)           # jump
-    f.text_above(50, -55, D_BTN_LG / 2.0, L["ftl_jump"])
-    f.mounts()
-    return f
-
-
 def f_engineering():
     """7.8 - reactor group left, then 7 system columns.
     Repair buttons on top row, allocation encoders below."""
@@ -723,6 +682,26 @@ HP_Z_BOT = (Z_COMMS - SZ["comms"][1] / 2) + HP_H / 2
 # needed there too, so it's kept as a named constant here.
 _hotas_outer_x = HOTAS_X + SZ["hotas"][0] / 2.0
 
+# Engineering: overhead panel, rear edge (local -y, away from the player -
+# see the local-Y -> world derivation in placement()) anchored to the top
+# of the main panel stack, i.e. cameras' own top edge - same edge-matching
+# idea as the tilt-screen console's link to comms above (down_slope()), but
+# engineering carries its own tilt, so it needs its own up-vector rather
+# than reusing TS_TILT's.
+ENG_TILT = 65.0
+_eng_a = math.radians(90.0 + ENG_TILT)
+ENG_UP_Y, ENG_UP_Z = math.cos(_eng_a), math.sin(_eng_a)
+ENG_TOP_Y = MAIN_Y - PLY_T                       # cameras' front face
+ENG_TOP_Z = Z_CAM + SZ["cameras"][1] / 2.0       # cameras' top edge
+ENG_Y = ENG_TOP_Y + ENG_UP_Y * SZ["engineering"][1] / 2.0
+ENG_Z = ENG_TOP_Z + ENG_UP_Z * SZ["engineering"][1] / 2.0
+# Engineering's far (free) edge - local y=+h/2 - used by the WALLS section
+# below to fill the gap that opens up outboard, between this edge and the
+# top hardpoint panels' own outward yaw.
+ENG_FAR_Y = ENG_TOP_Y + ENG_UP_Y * SZ["engineering"][1]
+ENG_FAR_Z = ENG_TOP_Z + ENG_UP_Z * SZ["engineering"][1]
+ENG_HALF_W = SZ["engineering"][0] / 2.0
+
 # name, builder, (x, y, z), yaw, tilt
 LAYOUT = [
     ("PanelScreen",      f_screen,      (0.0, MAIN_Y, Z_SCREEN),    0.0,   0.0),
@@ -745,7 +724,7 @@ LAYOUT = [
     # Propulsion/FTL are no longer simple flat yaw/tilt panels - they're
     # built as shaped, angled pieces in the WALLS section below.
 
-    ("PanelEngineering", f_engineering, (0.0, 300.0, EYE_Z + 500.0), 0.0,  65.0),
+    ("PanelEngineering", f_engineering, (0.0, ENG_Y, ENG_Z),         0.0, ENG_TILT),
 ]
 
 
@@ -836,10 +815,22 @@ def _hp_outer_bottom(sign):
     return (wx, wy, wz)
 
 
-def _tri_panel(p1, p2, p3, thickness=PLY_T):
-    """Flat triangular solid through 3 real 3D points, thickness split
-    evenly either side of the geometric face so the extrude direction's
-    sign doesn't matter."""
+def _hp_outer_top(sign):
+    """The top hardpoint panel's own outside-top corner (world coords) -
+    same construction as _hp_outer_bottom, mirrored to HP_Z_TOP/+HP_H/2.
+    Used by the EngLeftFill/EngRightFill triangles below."""
+    yaw = -sign * HP_YAW
+    r = math.radians(yaw)
+    lx, ly = sign * HP_W / 2.0, HP_H / 2.0      # local: outer edge, top
+    wx = sign * HP_X + lx * math.cos(r) + PLY_T * math.sin(r)
+    wy = HP_Y + lx * math.sin(r) - PLY_T * math.cos(r)
+    wz = HP_Z_TOP + ly
+    return (wx, wy, wz)
+
+
+def _tri_prism(p1, p2, p3, thickness=CUT_T):
+    """Generously-thick solid through 3 real 3D points, centred on their
+    plane - used to trim a TriPanel blank down to its triangle outline."""
     wire = Part.makePolygon([App.Vector(*p1), App.Vector(*p2),
                              App.Vector(*p3), App.Vector(*p1)])
     face = Part.Face(wire)
@@ -851,20 +842,164 @@ def _tri_panel(p1, p2, p3, thickness=PLY_T):
     return face.extrude(n * thickness)
 
 
-def propulsion_ftl_walls(sign, name):
+class TriPanel(Face):
+    """A Face authored in a local (u,v) grid - same hole()/slot()/text()
+    calls as every other panel in this file - then mapped onto an arbitrary
+    triangle in 3D and trimmed to that outline. This is what lets a
+    non-rectangular connector panel reuse the whole hole-cutting/etching
+    system instead of needing a parallel one.
+
+    v is "as close to world-up as this tilted plane allows" (world Z
+    projected into the plane), so authoring reads naturally - positive v is
+    roughly upward, regardless of how the panel itself is angled. u is
+    fixed to always point toward the player (v cross n, n pinned that way
+    below) - Propulsion's and FTL's Back/Front triangles are true mirror
+    images, so their local shapes come out as mirror images too, one
+    negated in u relative to the other. That's why _ftl_*_controls below
+    is FTL's own function with every u coordinate negated, not the same
+    function reused - confirmed against the real per-side local corners,
+    not assumed from the shape's symmetry."""
+
+    def __init__(self, p1, p2, p3):
+        self.p1, self.p2, self.p3 = p1, p2, p3
+        P1 = App.Vector(*p1)
+        e1 = App.Vector(*p2) - P1
+        e2 = App.Vector(*p3) - P1
+        n = e1.cross(e2)
+        n.normalize()
+        v = App.Vector(0, 0, 1) - n * App.Vector(0, 0, 1).dot(n)
+        v.normalize()
+        # Face._etch() always cuts into local +z, so +z has to be the face
+        # that actually faces the player, or labels end up on the hidden
+        # back face - present in the geometry, invisible in the room.
+        # cross(e1,e2)'s sign depends purely on (p1,p2,p3) point order, and
+        # that order flips between the mirrored left/right triangles even
+        # though the resulting local (u,v) shape doesn't (checked above) -
+        # so pin the real-world direction explicitly instead of trusting it.
+        if n.dot(App.Vector(0, -1, 0)) < 0:
+            n = n * -1.0
+        u = v.cross(n)
+        u.normalize()
+
+        def to_local(p):
+            d = App.Vector(*p) - P1
+            return (d.dot(u), d.dot(v))
+
+        lp = [to_local(p) for p in (p1, p2, p3)]
+        us, vs = [c[0] for c in lp], [c[1] for c in lp]
+        self.w, self.h = max(us) - min(us), max(vs) - min(vs)
+        cx, cy = (max(us) + min(us)) / 2.0, (max(vs) + min(vs)) / 2.0
+        self._origin = P1 + u * cx + v * cy   # local (0,0) = bbox centre
+        self._u, self._v, self._n = u, v, n
+        self.cuts = []
+        self.texts = []
+
+    def solid(self):
+        blank = super(TriPanel, self).solid().copy()
+        M = App.Matrix(self._u.x, self._v.x, self._n.x, self._origin.x,
+                       self._u.y, self._v.y, self._n.y, self._origin.y,
+                       self._u.z, self._v.z, self._n.z, self._origin.z,
+                       0, 0, 0, 1)
+        blank.transformShape(M)
+        return blank.common(_tri_prism(self.p1, self.p2, self.p3))
+
+
+# Back triangle: a right triangle, apex (narrow point) at local (101.75,
+# -165), right angle at (101.75, 165), third corner at (-101.75, 165) - the
+# full 203.5mm width is only available near v=165, tapering to nothing at
+# the apex, so all 3 controls sit close to u=101.75 and are staggered
+# further from it as v drops. Front triangle: apex at (49.52,-189.83),
+# flat 256.2mm-wide top edge at v=189.83. Both shapes verified (offline,
+# point-in-triangle check) to actually contain every hole/label placed
+# here, not just their bounding boxes - the boolean trim in TriPanel.solid()
+# would otherwise clip anything that strayed outside the real triangle.
+# FTL is the side whose raw cross-product normal pointed away from the
+# player (see the TriPanel.__init__ fix above), so its local u axis is the
+# mirror of Propulsion's - every u coordinate below is negated relative to
+# the _prop_*_controls layout it's otherwise a twin of.
+def _ftl_back_controls(f):
+    L = LABELS
+    f.hole(-30, 110, D_TOGGLE)
+    f.text_above(-30, 110, D_TOGGLE / 2.0, L["ftl_arm"])
+    f.hole(-55, 0, D_BTN_LG)
+    f.text_above(-55, 0, D_BTN_LG / 2.0, L["ftl_vector"])
+    f.hole(-85, -110, D_BTN_LG)
+    f.text_above(-85, -110, D_BTN_LG / 2.0, L["ftl_jump"])
+
+
+def _ftl_front_controls(f):
+    L = LABELS
+    f.text(0, 175, L["ftl_title"], TEXT_H_TITLE, valign="top")
+    f.hole(25, 140, D_BUTTON)           # dest prev
+    f.hole(-15, 140, D_BUTTON)          # dest next
+    f.text_above(5, 140, D_BUTTON / 2.0, L["ftl_dest"])
+    f.text_above(25, 140, D_BUTTON / 2.0, L["ftl_dest_prev"], TEXT_H_TINY)
+    f.text_above(-15, 140, D_BUTTON / 2.0, L["ftl_dest_next"], TEXT_H_TINY)
+
+
+def _prop_back_controls(f):
+    L = LABELS
+    f.hole(40, 110, D_ESTOP)            # emergency cutoff
+    f.text_above(40, 110, D_ESTOP / 2.0, L["prop_cutoff"])
+    f.hole(55, 0, D_BUTTON)             # RCS
+    f.text_above(55, 0, D_BUTTON / 2.0, L["prop_rcs"])
+    f.hole(70, -55, D_BUTTON)           # dampeners - between RCS and reverse
+    f.text_above(70, -55, D_BUTTON / 2.0, L["prop_dampeners"])
+    f.hole(85, -110, D_BUTTON)          # reverse thrust
+    f.text_above(85, -110, D_BUTTON / 2.0, L["prop_reverse"])
+
+
+def _prop_front_controls(f):
+    L = LABELS
+    f.text(0, 175, L["prop_title"], TEXT_H_TITLE, valign="top")
+    f.hole(-60, 140, D_TOGGLE)          # arm
+    f.text_above(-60, 140, D_TOGGLE / 2.0, L["prop_arm"])
+    f.hole(60, 140, D_KNOB)             # ignition
+    f.text_above(60, 140, D_KNOB / 2.0, L["prop_ignition"])
+    f.hole(10, 40, D_KNOB)              # propellant mix
+    f.text_above(10, 40, D_KNOB / 2.0, L["prop_mix"])
+    f.text_left(10, 40, D_KNOB / 2.0, L["prop_mix_lean"])
+    f.text_right(10, 40, D_KNOB / 2.0, L["prop_mix_rich"])
+    f.slot(32, -60, 50, 14)             # engine temp bargraph
+    f.text_above(32, -60, 7.0, L["prop_temp"])
+
+
+def propulsion_ftl_walls(sign, name, back_controls, front_controls):
     p1 = (sign * _hotas_outer_x, TS_Y_BOT, TS_Z_BOT)
     p2 = _hp_outer_bottom(sign)
     p3 = (sign * _pivot_x, TS_TOP_Y, TS_TOP_Z)
     p4 = (sign * _hotas_outer_x, TS_TOP_Y, TS_TOP_Z)
-    return {name + "Back": _tri_panel(p1, p4, p3),
-            name + "Front": _tri_panel(p1, p3, p2)}
+    back, front = TriPanel(p1, p4, p3), TriPanel(p1, p3, p2)
+    back_controls(back)
+    front_controls(front)
+    return {name + "Back": back.solid(), name + "Front": front.solid()}
+
+
+# Engineering now shares its outer-bottom corners with cameras' top corners
+# and the top hardpoint panels' inner-top corner (all three coincide there -
+# see the SZ["engineering"] derivation above). Outboard of that shared
+# corner, engineering's far edge and the hardpoint panel's own outward yaw
+# diverge, opening a gap - closed here with one flat triangular fill per
+# side, pinned by the 3 real corners involved: the shared corner itself,
+# engineering's own far-top corner, and the hardpoint panel's outer-top
+# corner. Unlike Propulsion/FTL, 3 points are always coplanar, so a single
+# triangle per side is enough - no Back/Front split needed.
+def eng_fill(sign):
+    shared = (sign * ENG_HALF_W, ENG_TOP_Y, ENG_TOP_Z)
+    eng_far = (sign * ENG_HALF_W, ENG_FAR_Y, ENG_FAR_Z)
+    hp_outer = _hp_outer_top(sign)
+    return TriPanel(shared, eng_far, hp_outer).solid()
 
 
 WALLS = {}
 WALLS.update(hotas_walls(-1, "HotasLeft"))
 WALLS.update(hotas_walls(1, "HotasRight"))
-WALLS.update(propulsion_ftl_walls(-1, "Propulsion"))
-WALLS.update(propulsion_ftl_walls(1, "Ftl"))
+WALLS.update(propulsion_ftl_walls(-1, "Propulsion",
+                                  _prop_back_controls, _prop_front_controls))
+WALLS.update(propulsion_ftl_walls(1, "Ftl",
+                                  _ftl_back_controls, _ftl_front_controls))
+WALLS["EngLeftFill"]  = eng_fill(-1)
+WALLS["EngRightFill"] = eng_fill(1)
 
 
 # ================================================================ BUILD
@@ -902,6 +1037,16 @@ for a, b in [("PropulsionBack",  "MountHotasLeft"),
              ("FtlBack",         "MountHotasRight"),
              ("FtlBack",         "PanelComms"),
              ("FtlFront",        "PanelHardpoint4")]:
+    App.Console.PrintMessage("  %-16s -> %-16s  %6.1f\n" % (a, b, _gap(a, b)))
+
+App.Console.PrintMessage("\nEngineering connector contact check (mm, want ~0):\n")
+for a, b in [("PanelEngineering", "PanelCameras"),
+             ("EngLeftFill",      "PanelEngineering"),
+             ("EngLeftFill",      "PanelCameras"),
+             ("EngLeftFill",      "PanelHardpoint1"),
+             ("EngRightFill",     "PanelEngineering"),
+             ("EngRightFill",     "PanelCameras"),
+             ("EngRightFill",     "PanelHardpoint3")]:
     App.Console.PrintMessage("  %-16s -> %-16s  %6.1f\n" % (a, b, _gap(a, b)))
 
 try:
