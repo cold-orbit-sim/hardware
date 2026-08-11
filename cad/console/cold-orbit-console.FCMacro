@@ -157,7 +157,7 @@ LABELS = {
     # Left-to-right order also still open in 7.4.
     "ts_modes_title":       "MODE SELECT",
     "ts_modes_modes":       ("ENGINEERING", "PROPULSION", "FTL", "TURRETS",
-                             "MISSILES", "COMMS", "HARDPOINTS"),
+                             "MISSILES", "COMMS", "HARDPOINTS", "MAP"),
 
     # --- 7.5 comms -----------------------------------------------------
     # No panel title: master warn/caution and volume are ship-wide, not
@@ -535,12 +535,14 @@ def f_missiles():
 
 
 def f_ts_modes():
-    """7.4 - Engineering, Propulsion, FTL, Turrets, Missiles, Comms, Hardpoints.
+    """7.4 - Engineering, Propulsion, FTL, Turrets, Missiles, Comms, Hardpoints, Map.
     Square backlit buttons - the backlight is the selection indicator,
-    so no separate LED cutout."""
+    so no separate LED cutout.
+    8 buttons at 44 mm pitch within the 400 mm panel (10 mm inter-button
+    gap); panel width unchanged so HOTAS geometry is unaffected."""
     f = Face("ts_modes")
     L = LABELS
-    xs = spread(7, 52.0)
+    xs = spread(8, 44.0)
     for x, name in zip(xs, L["ts_modes_modes"]):
         f.square(x, 0.0, BTN_SQ)
         f.text_above(x, 0.0, BTN_SQ / 2.0, name)
