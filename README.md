@@ -28,8 +28,8 @@ docs/             design notes
 | File | What it is |
 |---|---|
 | `cold-orbit-console.FCMacro` | FreeCAD macro. Builds every panel as a separate solid in its seated-player position |
-| `console_layout.py` | Same layout data, rendered as front/side/plan/isometric check views with matplotlib. Lets you validate geometry without opening FreeCAD |
-| `console-layout.png` | Rendered output of the above |
+
+The FCMacro is the single source of truth for console geometry. To inspect the layout without hunting through 3D, use the built-in explode-view slider: set `EXPLODE` (0–100 mm) near the top of the `PARAMETERS` block, re-run the macro, and all 14 manufacturing groups radiate outward from the eye point so every panel is visible.
 
 ### `cad/main-panel/`
 
