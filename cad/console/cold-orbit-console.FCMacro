@@ -231,33 +231,34 @@ SZ = {
     "ts_modes":    (400.0,  80.0),
     "touchscreen": (400.0, 250.0),
     "hotas":       (200.0, 260.0),
-    "hardpoint":   (260.0,   0.0),   # height derived below
+    "hardpoint":        (260.0,   0.0),   # height derived below
     # Propulsion/FTL aren't flat Face panels any more - see TriPanel in the
     # WALLS section, sized directly from real touch-point geometry there.
-    "engineering": (0.0,   300.0),   # width derived below
+    "engineering":      (0.0,   300.0),   # width derived below (screen-width centre)
+    "engineering_ext":  (0.0,   300.0),   # width derived below (blank side extensions)
 }
 
-# Cameras and comms both run the full width of the main panel group -
-# turrets + screen + missiles - so they stay flush with them however those
-# three are resized. Their controls stay centred (over the screen); the
-# extra width beyond the screen is deliberate dead space either side.
+# Cameras and comms match the screen width only - no dead overhang beside
+# turrets/missiles. Engineering still spans the full main-group width so its
+# outer corners land on cameras' top corners.
 _MAIN_GROUP_W = SZ["turrets"][0] + SZ["screen"][0] + SZ["missiles"][0]
-SZ["cameras"] = (_MAIN_GROUP_W, SZ["cameras"][1])
-SZ["comms"]   = (_MAIN_GROUP_W, SZ["comms"][1])
-# Engineering now spans the same width as cameras, so its own outer corners
-# land exactly on cameras' top corners - which is also where the top
-# hardpoint panels' inner-top corner pivots (_pivot_x, set up below, works
-# out equal to _MAIN_GROUP_W / 2). See the EngLeftFill/EngRightFill triangles
-# in the WALLS section for the gap that opens up outboard of that shared
-# corner, between engineering's angled face and the hardpoint panels' yaw.
-SZ["engineering"] = (_MAIN_GROUP_W, SZ["engineering"][1])
+SZ["cameras"] = (SZ["screen"][0], SZ["cameras"][1])
+SZ["comms"]   = (SZ["screen"][0], SZ["comms"][1])
+SZ["engineering"] = (SZ["screen"][0], SZ["engineering"][1])
+_eng_ext_w = (_MAIN_GROUP_W - SZ["screen"][0]) / 2.0
+SZ["engineering_ext"] = (_eng_ext_w, SZ["engineering"][1])
+
+# Turrets and missiles grow to fill the full vertical span beside cameras,
+# screen, and comms - top edge flush with cameras' top, bottom edge flush
+# with comms' bottom.
+_weapons_h = SZ["cameras"][1] + SZ["screen"][1] + SZ["comms"][1]
+SZ["turrets"]  = (SZ["turrets"][0],  _weapons_h)
+SZ["missiles"] = (SZ["missiles"][0], _weapons_h)
 
 # The 4 hardpoint panels flank turrets/missiles two-a-side, stacked to touch
-# and together reach the same total height as the weapons panels plus
-# cameras and comms above and below them - i.e. top of cameras to bottom of
-# comms, split exactly in half since the pair touches with no gap.
+# and together reach from top-of-cameras to bottom-of-comms, split in half.
 SZ["hardpoint"] = (SZ["hardpoint"][0],
-                   (SZ["cameras"][1] + SZ["turrets"][1] + SZ["comms"][1]) / 2.0)
+                   (SZ["cameras"][1] + SZ["screen"][1] + SZ["comms"][1]) / 2.0)
 
 
 # ================================================================ LETTERING
@@ -273,6 +274,10 @@ _FONT = _resolve_font() if SHOW_LABELS else ""
 _TEXT_CACHE = {}
 
 doc = App.ActiveDocument or App.newDocument("ColdOrbitConsole")
+
+for _obj in list(doc.Objects):
+    doc.removeObject(_obj.Name)
+doc.recompute()
 
 if SHOW_LABELS and _FONT:
     import Draft
@@ -419,28 +424,28 @@ def f_comms():
     L = LABELS
     sq = BTN_SQ / 2.0
 
-    f.hole(-280, 28, D_KNOB)            # master volume, top-left of cluster
-    f.text_above(-280, 28, D_KNOB / 2.0, L["comms_volume"])
+    f.hole(-294, 28, D_KNOB)            # master volume, top-left of cluster
+    f.text_above(-294, 28, D_KNOB / 2.0, L["comms_volume"])
 
     # Nav cluster: Select outboard, Up/Down stacked to the right of it.
-    f.square(-200, 0, BTN_SQ)           # select
-    f.text_above(-200, 0, sq, L["comms_select"])
-    f.square(-150, 22, BTN_SQ)          # up
-    f.text_above(-150, 22, sq, L["comms_up"])
-    f.square(-150, -22, BTN_SQ)         # down
-    f.text_below(-150, -22, sq, L["comms_down"])
+    f.square(-214, 0, BTN_SQ)           # select
+    f.text_above(-214, 0, sq, L["comms_select"])
+    f.square(-164, 22, BTN_SQ)          # up
+    f.text_above(-164, 22, sq, L["comms_up"])
+    f.square(-164, -22, BTN_SQ)         # down
+    f.text_below(-164, -22, sq, L["comms_down"])
 
-    f.slot(0, 0, 190, 42)               # comms LCD
-    f.text_above(0, 0, 21.0, L["comms_lcd"])
-    f.hole(140, 0, D_LED)               # new message
-    f.text_right(140, 0, D_LED / 2.0, L["comms_msg"])
-    f.slot(240, 0, 90, 32)              # 7-seg clock
-    f.text_above(240, 0, 16.0, L["comms_clock"])
+    f.slot(-14, 0, 190, 42)             # comms LCD
+    f.text_above(-14, 0, 21.0, L["comms_lcd"])
+    f.hole(-14, -30, D_LED)             # new message, below LCD
+    f.text_below(-14, -30, D_LED / 2.0, L["comms_msg"])
+    f.slot(145, 0, 90, 32)              # 7-seg clock
+    f.text_above(145, 0, 16.0, L["comms_clock"])
 
-    f.square(340, 22, BTN_SQ)           # master warn
-    f.text_above(340, 22, sq, L["comms_warn"])
-    f.square(340, -22, BTN_SQ)          # master caution
-    f.text_below(340, -22, sq, L["comms_caution"])
+    f.square(285, 22, BTN_SQ)           # master warn
+    f.text_above(285, 22, sq, L["comms_warn"])
+    f.square(285, -22, BTN_SQ)          # master caution
+    f.text_below(285, -22, sq, L["comms_caution"])
 
     f.title(L["comms_title"], TEXT_H_HDR, top=False)
     f.mounts()
@@ -593,6 +598,13 @@ def f_hardpoint():
     return f
 
 
+def f_engineering_ext():
+    """Blank side extension of the engineering panel - no controls yet."""
+    f = Face("engineering_ext")
+    f.mounts()
+    return f
+
+
 def f_engineering():
     """7.8 - reactor group left, then 7 system columns.
     Repair buttons on top row, allocation encoders below."""
@@ -625,9 +637,10 @@ def f_engineering():
 
 # ================================================================ LAYOUT
 _sw, _sh = SZ["screen"]
-Z_CAM   = Z_SCREEN + _sh / 2 + SZ["cameras"][1] / 2
-Z_COMMS = Z_SCREEN - _sh / 2 - SZ["comms"][1] / 2
-X_SIDE  = _sw / 2 + SZ["turrets"][0] / 2
+Z_CAM     = Z_SCREEN + _sh / 2 + SZ["cameras"][1] / 2
+Z_COMMS   = Z_SCREEN - _sh / 2 - SZ["comms"][1] / 2
+Z_WEAPONS = (Z_CAM + SZ["cameras"][1] / 2 + Z_COMMS - SZ["comms"][1] / 2) / 2.0
+X_SIDE    = _sw / 2 + SZ["turrets"][0] / 2
 
 TS_TILT = -55.0
 _a = math.radians(90.0 + TS_TILT)
@@ -702,15 +715,16 @@ ENG_Z = ENG_TOP_Z + ENG_UP_Z * SZ["engineering"][1] / 2.0
 # top hardpoint panels' own outward yaw.
 ENG_FAR_Y = ENG_TOP_Y + ENG_UP_Y * SZ["engineering"][1]
 ENG_FAR_Z = ENG_TOP_Z + ENG_UP_Z * SZ["engineering"][1]
-ENG_HALF_W = SZ["engineering"][0] / 2.0
+ENG_HALF_W = _MAIN_GROUP_W / 2.0   # full engineering group span, for the fill triangles
+_eng_ext_x = (SZ["screen"][0] + SZ["engineering_ext"][0]) / 2.0
 
 # name, builder, (x, y, z), yaw, tilt
 LAYOUT = [
     ("PanelScreen",      f_screen,      (0.0, MAIN_Y, Z_SCREEN),    0.0,   0.0),
     ("PanelCameras",     f_cameras,     (0.0, MAIN_Y, Z_CAM),       0.0,   0.0),
     ("PanelComms",       f_comms,       (0.0, MAIN_Y, Z_COMMS),     0.0,   0.0),
-    ("PanelTurrets",     f_turrets,     (-X_SIDE, MAIN_Y, Z_SCREEN), 0.0,  0.0),
-    ("PanelMissiles",    f_missiles,    (X_SIDE, MAIN_Y, Z_SCREEN),  0.0,  0.0),
+    ("PanelTurrets",     f_turrets,     (-X_SIDE, MAIN_Y, Z_WEAPONS), 0.0,  0.0),
+    ("PanelMissiles",    f_missiles,    (X_SIDE, MAIN_Y, Z_WEAPONS),  0.0,  0.0),
 
     ("PanelTsModes",     f_ts_modes,    TS_MODES_POS,               0.0, TS_TILT),
     ("PanelTouchscreen", f_touchscreen, TS_POS,                     0.0, TS_TILT),
@@ -726,7 +740,9 @@ LAYOUT = [
     # Propulsion/FTL are no longer simple flat yaw/tilt panels - they're
     # built as shaped, angled pieces in the WALLS section below.
 
-    ("PanelEngineering", f_engineering, (0.0, ENG_Y, ENG_Z),         0.0, ENG_TILT),
+    ("PanelEngineering",      f_engineering,     (0.0,         ENG_Y, ENG_Z), 0.0, ENG_TILT),
+    ("PanelEngineeringLeft",  f_engineering_ext, (-_eng_ext_x, ENG_Y, ENG_Z), 0.0, ENG_TILT),
+    ("PanelEngineeringRight", f_engineering_ext, ( _eng_ext_x, ENG_Y, ENG_Z), 0.0, ENG_TILT),
 ]
 
 
@@ -1004,18 +1020,108 @@ WALLS["EngLeftFill"]  = eng_fill(-1)
 WALLS["EngRightFill"] = eng_fill(1)
 
 
-# ================================================================ BUILD
-_objs = {}
-for name, builder, pos, yaw, tilt in LAYOUT:
-    obj = doc.addObject("Part::Feature", name)
-    obj.Shape = builder().solid()
-    obj.Placement = placement(pos, yaw, tilt)
-    _objs[name] = obj
+# ================================================================ EXPLODE DIALOG
+try:
+    from PySide2 import QtWidgets, QtCore
+except ImportError:
+    from PySide import QtGui as QtWidgets, QtCore
 
+_qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+_dlg  = QtWidgets.QDialog()
+_dlg.setWindowTitle("Cold Orbit Console")
+_dlg_box = QtWidgets.QVBoxLayout()
+_sep_label = QtWidgets.QLabel("Panel separation: 0 mm")
+_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+_slider.setRange(0, 100)
+_slider.setValue(0)
+_slider.valueChanged.connect(lambda v: _sep_label.setText("Panel separation: %d mm" % v))
+_btns = QtWidgets.QDialogButtonBox(
+    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+_btns.accepted.connect(_dlg.accept)
+_btns.rejected.connect(_dlg.reject)
+_dlg_box.addWidget(_sep_label)
+_dlg_box.addWidget(_slider)
+_dlg_box.addWidget(_btns)
+_dlg.setLayout(_dlg_box)
+
+if not _dlg.exec_():
+    raise SystemExit("Macro cancelled")
+
+EXPLODE = float(_slider.value())          # mm of separation
+_EXPLODE_ORIGIN = App.Vector(0.0, 0.0, EYE_Z)
+
+
+# ================================================================ BUILD
+# Manufacturing groups - each explodes as a unit.
+# (group_name, layout_members, walls_members)
+GROUPS = [
+    ("EngLeftFill",      ["PanelEngineeringLeft"],
+                         ["EngLeftFill"]),
+    ("Engineering",      ["PanelEngineering"],
+                         []),
+    ("EngRightFill",     ["PanelEngineeringRight"],
+                         ["EngRightFill"]),
+    ("Hardpoint1",       ["PanelHardpoint1"],        []),
+    ("Hardpoint2",       ["PanelHardpoint2"],        []),
+    ("Hardpoint3",       ["PanelHardpoint3"],        []),
+    ("Hardpoint4",       ["PanelHardpoint4"],        []),
+    ("Turrets",          ["PanelTurrets"],           []),
+    ("Missiles",         ["PanelMissiles"],          []),
+    ("ScreenCameras",    ["PanelScreen", "PanelCameras"], []),
+    ("Comms",            ["PanelComms"],             []),
+    ("TouchscreenHotas", ["PanelTsModes", "PanelTouchscreen",
+                          "MountHotasLeft", "MountHotasRight"],
+                         ["HotasLeftSide", "HotasLeftBack",
+                          "HotasRightSide", "HotasRightBack"]),
+    ("FTL",              [],  ["FtlBack", "FtlFront"]),
+    ("Propulsion",       [],  ["PropulsionBack", "PropulsionFront"]),
+]
+
+# Pre-build all shapes so centroid computation (bounding-box) is available.
+_layout_built = {}
+for name, builder, pos, yaw, tilt in LAYOUT:
+    _layout_built[name] = (builder().solid(), pos, yaw, tilt)
+
+_layout_pos = {name: App.Vector(*pos) for name, _, pos, __, ___ in LAYOUT}
+
+_wall_centre = {}
 for name, shape in WALLS.items():
-    obj = doc.addObject("Part::Feature", name)
-    obj.Shape = shape
-    _objs[name] = obj
+    bb = shape.BoundBox
+    _wall_centre[name] = App.Vector(
+        (bb.XMin + bb.XMax) / 2,
+        (bb.YMin + bb.YMax) / 2,
+        (bb.ZMin + bb.ZMax) / 2)
+
+_objs = {}
+for gname, layout_members, walls_members in GROUPS:
+    pts = ([_layout_pos[n] for n in layout_members] +
+           [_wall_centre[n] for n in walls_members])
+    cx = sum(p.x for p in pts) / len(pts)
+    cy = sum(p.y for p in pts) / len(pts)
+    cz = sum(p.z for p in pts) / len(pts)
+    centroid = App.Vector(cx, cy, cz)
+
+    offset = App.Vector(0, 0, 0)
+    if EXPLODE > 0.0:
+        _d = centroid - _EXPLODE_ORIGIN
+        if _d.Length > 1e-6:
+            _d.normalize()
+            offset = _d * EXPLODE
+
+    for name in layout_members:
+        shape, pos, yaw, tilt = _layout_built[name]
+        epos = App.Vector(*pos) + offset
+        obj = doc.addObject("Part::Feature", name)
+        obj.Shape = shape
+        obj.Placement = placement((epos.x, epos.y, epos.z), yaw, tilt)
+        _objs[name] = obj
+
+    for name in walls_members:
+        moved = WALLS[name].copy()
+        moved.translate(offset)
+        obj = doc.addObject("Part::Feature", name)
+        obj.Shape = moved
+        _objs[name] = obj
 
 doc.recompute()
 
