@@ -1070,28 +1070,20 @@ WALLS["BoxHardpoint2"] = _bx("hardpoint", (-HP_X, HP_Y, HP_Z_BOT),  HP_YAW, 0.0)
 WALLS["BoxHardpoint3"] = _bx("hardpoint", ( HP_X, HP_Y, HP_Z_TOP), -HP_YAW, 0.0)
 WALLS["BoxHardpoint4"] = _bx("hardpoint", ( HP_X, HP_Y, HP_Z_BOT), -HP_YAW, 0.0)
 
-# Turret/missile outer-to-hardpoint fill: solid rectangular block that closes
-# the visible gap between the turret box outer wall and the hardpoint boxes,
-# forming a continuous solid block across the full build width.
-def _turret_hp_fill(sign):
-    x_inner = sign * _pivot_x
-    x_outer = _hp_outer_bottom(sign)[0]
-    x_lo, x_hi = sorted([x_inner, x_outer])
-    return Part.makeBox(x_hi - x_lo, BOX_D, ENG_TOP_Z - TS_TOP_Z,
-                        App.Vector(x_lo, MAIN_Y, TS_TOP_Z))
+# Engineering perpendicular boxes: extend BOX_D in local -Z (away from panel face =
+# up-and-back in world), giving the sloped top surface above the tilted panels.
+WALLS["BoxEngineering"]      = _bx("engineering",     (0.0,         ENG_Y, ENG_Z), 0.0, ENG_TILT)
+WALLS["BoxEngineeringLeft"]  = _bx("engineering_ext", (-_eng_ext_x, ENG_Y, ENG_Z), 0.0, ENG_TILT)
+WALLS["BoxEngineeringRight"] = _bx("engineering_ext", ( _eng_ext_x, ENG_Y, ENG_Z), 0.0, ENG_TILT)
 
-WALLS["TurretsHpFillLeft"]  = _turret_hp_fill(-1)
-WALLS["TurretsHpFillRight"] = _turret_hp_fill(1)
-
-# Engineering wedge: triangular prism (flat top), full group width.
-# Side profile: (ENG_TOP_Y, TS_TOP_Z) → (ENG_TOP_Y, ENG_FAR_Z) → (MAIN_Y+BOX_D, ENG_FAR_Z)
-# Front edge at ENG_TOP_Y is the full height; top is flat at ENG_FAR_Z; back at MAIN_Y+BOX_D.
+# Engineering wedge: triangular prism behind the main panel wall (flat top at ENG_FAR_Z).
+# Profile (YZ): (ENG_TOP_Y, TS_TOP_Z) → (ENG_TOP_Y, ENG_FAR_Z) → (MAIN_Y+BOX_D, ENG_FAR_Z)
 def _eng_wedge():
     pts = [
-        App.Vector(0.0, ENG_TOP_Y,       TS_TOP_Z),
-        App.Vector(0.0, ENG_TOP_Y,       ENG_FAR_Z),
-        App.Vector(0.0, MAIN_Y + BOX_D,  ENG_FAR_Z),
-        App.Vector(0.0, ENG_TOP_Y,       TS_TOP_Z),
+        App.Vector(0.0, ENG_TOP_Y,      TS_TOP_Z),
+        App.Vector(0.0, ENG_TOP_Y,      ENG_FAR_Z),
+        App.Vector(0.0, MAIN_Y + BOX_D, ENG_FAR_Z),
+        App.Vector(0.0, ENG_TOP_Y,      TS_TOP_Z),
     ]
     face  = Part.Face(Part.makePolygon(pts))
     solid = face.extrude(App.Vector(_MAIN_GROUP_W, 0.0, 0.0))
@@ -1100,31 +1092,67 @@ def _eng_wedge():
 
 WALLS["EngBox"] = _eng_wedge()
 
-# EngFill boxes: solid bounding-box fills replacing the thin triangular connectors
-# between the engineering outer edge and the top hardpoint outer corner.
-def _eng_fill_box(sign):
-    pts   = [(sign * ENG_HALF_W, ENG_TOP_Y, ENG_TOP_Z),
-             (sign * ENG_HALF_W, ENG_FAR_Y, ENG_FAR_Z),
-             _hp_outer_top(sign)]
-    xs    = [p[0] for p in pts]
-    ys    = [p[1] for p in pts]
-    zs    = [p[2] for p in pts]
-    dx    = max(max(xs) - min(xs), PLY_T)
-    dy    = max(max(ys) - min(ys), PLY_T)
-    dz    = max(max(zs) - min(zs), PLY_T)
-    return Part.makeBox(dx, dy, dz, App.Vector(min(xs), min(ys), min(zs)))
+# Turret/missile to hardpoint fills: right-triangle prism in XY at HP_YAW angle.
+# The hypotenuse runs from the turret front-outer corner to the angled back-outer
+# corner, matching the hardpoint face direction and closing the corner gap.
+def _turret_hp_fill(sign):
+    r  = math.radians(HP_YAW)
+    x0 = sign * _pivot_x
+    x1 = sign * (_pivot_x + BOX_D * math.tan(r))   # outer back corner at HP_YAW angle
+    pts = [
+        App.Vector(x0, MAIN_Y,         0.0),
+        App.Vector(x0, MAIN_Y + BOX_D, 0.0),
+        App.Vector(x1, MAIN_Y + BOX_D, 0.0),
+        App.Vector(x0, MAIN_Y,         0.0),
+    ]
+    face  = Part.Face(Part.makePolygon(pts))
+    solid = face.extrude(App.Vector(0.0, 0.0, ENG_TOP_Z - TS_TOP_Z))
+    solid.translate(App.Vector(0.0, 0.0, TS_TOP_Z))
+    return solid
 
-WALLS["EngLeftFillBox"]  = _eng_fill_box(-1)
-WALLS["EngRightFillBox"] = _eng_fill_box(1)
+WALLS["TurretsHpFillLeft"]  = _turret_hp_fill(-1)
+WALLS["TurretsHpFillRight"] = _turret_hp_fill(1)
 
-# Propulsion/FTL lower box: extends the wing panels down to desk level (TS_Z_BOT)
-# with back wall aligned to MAIN_Y + BOX_D, matching the weapons/turret boxes above.
+# EngFill: triangular prism (YZ cross-section, extruded in X) filling the gap
+# between the engineering outer edge and the hardpoint outer-top corner.
+# Avoids the cuboid bounding-box: the YZ triangle exactly matches the 3 corner points.
+def _eng_fill_prism(sign):
+    hp_out = _hp_outer_top(sign)
+    yz_pts = [
+        App.Vector(0.0, ENG_TOP_Y,  ENG_TOP_Z),
+        App.Vector(0.0, ENG_FAR_Y,  ENG_FAR_Z),
+        App.Vector(0.0, hp_out[1],  hp_out[2]),
+        App.Vector(0.0, ENG_TOP_Y,  ENG_TOP_Z),
+    ]
+    face  = Part.Face(Part.makePolygon(yz_pts))
+    x_in  = sign * ENG_HALF_W
+    x_out = hp_out[0]
+    solid = face.extrude(App.Vector(x_out - x_in, 0.0, 0.0))
+    solid.translate(App.Vector(x_in, 0.0, 0.0))
+    return solid
+
+WALLS["EngLeftFillBox"]  = _eng_fill_prism(-1)
+WALLS["EngRightFillBox"] = _eng_fill_prism(1)
+
+# Propulsion/FTL lower: trapezoid in XY (outer wall at HP_YAW angle), from desk
+# level (TS_Z_BOT) to main panel base (TS_TOP_Z), back at MAIN_Y + BOX_D.
+# Outer wall angles outward matching the hardpoint panel direction.
 def _prop_ftl_lower(sign):
-    x_inner = sign * _hotas_outer_x
-    x_outer = sign * _pivot_x
-    x_lo, x_hi = sorted([x_inner, x_outer])
-    return Part.makeBox(x_hi - x_lo, BOX_D, TS_TOP_Z - TS_Z_BOT,
-                        App.Vector(x_lo, MAIN_Y, TS_Z_BOT))
+    r     = math.radians(HP_YAW)
+    x_in  = sign * _hotas_outer_x
+    x_out = sign * _pivot_x
+    x_ext = sign * (_pivot_x + BOX_D * math.tan(r))   # outer at back, HP_YAW angle
+    pts   = [
+        App.Vector(x_in,  MAIN_Y,         0.0),
+        App.Vector(x_out, MAIN_Y,         0.0),
+        App.Vector(x_ext, MAIN_Y + BOX_D, 0.0),
+        App.Vector(x_in,  MAIN_Y + BOX_D, 0.0),
+        App.Vector(x_in,  MAIN_Y,         0.0),
+    ]
+    face  = Part.Face(Part.makePolygon(pts))
+    solid = face.extrude(App.Vector(0.0, 0.0, TS_TOP_Z - TS_Z_BOT))
+    solid.translate(App.Vector(0.0, 0.0, TS_Z_BOT))
+    return solid
 
 WALLS["PropulsionLower"] = _prop_ftl_lower(-1)
 WALLS["FtlLower"]        = _prop_ftl_lower(1)
@@ -1166,11 +1194,11 @@ _EXPLODE_ORIGIN = App.Vector(0.0, 0.0, EYE_Z)
 # (group_name, layout_members, walls_members)
 GROUPS = [
     ("EngLeftFill",      ["PanelEngineeringLeft"],
-                         ["EngLeftFillBox"]),
+                         ["BoxEngineeringLeft", "EngLeftFillBox"]),
     ("Engineering",      ["PanelEngineering"],
-                         ["EngBox"]),
+                         ["BoxEngineering", "EngBox"]),
     ("EngRightFill",     ["PanelEngineeringRight"],
-                         ["EngRightFillBox"]),
+                         ["BoxEngineeringRight", "EngRightFillBox"]),
     ("Hardpoint1",       ["PanelHardpoint1"],
                          ["BoxHardpoint1", "TurretsHpFillLeft"]),
     ("Hardpoint2",       ["PanelHardpoint2"],        ["BoxHardpoint2"]),
