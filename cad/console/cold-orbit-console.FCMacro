@@ -1017,32 +1017,20 @@ WALLS.update(propulsion_ftl_walls(-1, "Propulsion",
                                   _prop_back_controls, _prop_front_controls))
 WALLS.update(propulsion_ftl_walls(1, "Ftl",
                                   _ftl_back_controls, _ftl_front_controls))
-WALLS["EngLeftFill"]  = eng_fill(-1)
-WALLS["EngRightFill"] = eng_fill(1)
-
+# EngLeftFill/EngRightFill shapes are replaced by solid box fills below.
 
 # ================================================================ BOX ENCLOSURES
-# Standard panels: 200 mm box shell (back + 4 walls, no front face).
-# Touchscreen / TsModes: triangular-profile wedge — horizontal bottom plate +
-#   vertical back plate. Side walls come from HotasLeftSide/RightSide (already
-#   in WALLS). No perpendicular box for these panels; the face slope IS the front.
-# HOTAS decks: the face panel itself IS the flat plywood desk surface — no box below.
-# Propulsion/FTL: outward-extending horizontal shelf at TS_TOP_Z (base of the main
-#   panel stack) so the hardpoint boxes have a surface to rest on.
-# EngLeftFill/RightFill are structural gap-fill triangles: no box.
-# All Face-based shells built in local coords, transformed via placement().toMatrix().
 
 def _face_box_world(w, h, pos, yaw, tilt, box_d=BOX_D):
-    """Back panel + 4 side walls in local Face coords (Z=0 = front face inner surface,
-    box extends rearward to Z=-box_d), transformed to world coordinates."""
+    """Back panel + 4 side walls in local Face coords, transformed to world."""
     inner_d = box_d - PLY_T
     inner_w = w - 2 * PLY_T
     shell = Part.makeCompound([
-        Part.makeBox(w, h,    PLY_T,   App.Vector(-w/2,        -h/2,        -box_d)),          # back
-        Part.makeBox(PLY_T, h, inner_d, App.Vector(-w/2,        -h/2, -box_d + PLY_T)),        # left
-        Part.makeBox(PLY_T, h, inner_d, App.Vector(w/2-PLY_T,  -h/2, -box_d + PLY_T)),        # right
-        Part.makeBox(inner_w, PLY_T, inner_d, App.Vector(-w/2+PLY_T, -h/2,       -box_d + PLY_T)),  # bottom
-        Part.makeBox(inner_w, PLY_T, inner_d, App.Vector(-w/2+PLY_T, h/2-PLY_T, -box_d + PLY_T)),  # top
+        Part.makeBox(w, h,    PLY_T,   App.Vector(-w/2,        -h/2,        -box_d)),
+        Part.makeBox(PLY_T, h, inner_d, App.Vector(-w/2,        -h/2, -box_d + PLY_T)),
+        Part.makeBox(PLY_T, h, inner_d, App.Vector(w/2-PLY_T,  -h/2, -box_d + PLY_T)),
+        Part.makeBox(inner_w, PLY_T, inner_d, App.Vector(-w/2+PLY_T, -h/2,       -box_d + PLY_T)),
+        Part.makeBox(inner_w, PLY_T, inner_d, App.Vector(-w/2+PLY_T, h/2-PLY_T, -box_d + PLY_T)),
     ])
     shell.transformShape(placement(pos, yaw, tilt).toMatrix())
     return shell
@@ -1052,20 +1040,7 @@ def _bx(key, pos, yaw=0.0, tilt=0.0, box_d=BOX_D):
     return _face_box_world(SZ[key][0], SZ[key][1], pos, yaw, tilt, box_d)
 
 
-def _hardpoint_shelf(sign):
-    """Horizontal PLY_T shelf at TS_TOP_Z (base of the main panel stack ≈ 727 mm).
-    Extends from the turret/missile outer wall (sign * _pivot_x) outward to the
-    hardpoint panel's outer-bottom corner, so the hardpoint enclosure has a base."""
-    x_inner = sign * _pivot_x
-    x_outer = _hp_outer_bottom(sign)[0]
-    x_lo, x_hi = min(x_inner, x_outer), max(x_inner, x_outer)
-    return Part.makeBox(x_hi - x_lo, MAIN_Y - TS_Y_BOT, PLY_T,
-                        App.Vector(x_lo, TS_Y_BOT, TS_TOP_Z))
-
-
-# Touchscreen wedge: bottom (horizontal) + back (vertical) plates.
-# TS_TOP_Z is the base of the main panel stack and the top of the back plate.
-# TS_Z_BOT = HOTAS_Z is the HOTAS deck level and the bottom of the wedge.
+# --- Touchscreen wedge: flat bottom + vertical back at the main panel wall ---
 _ts_w = 2.0 * TS_EDGE_X
 WALLS["TsBottom"] = Part.makeBox(
     _ts_w, TS_TOP_Y - TS_Y_BOT, PLY_T,
@@ -1074,23 +1049,85 @@ WALLS["TsBack"] = Part.makeBox(
     _ts_w, PLY_T, TS_TOP_Z - TS_Z_BOT,
     App.Vector(-TS_EDGE_X, TS_TOP_Y - PLY_T, TS_Z_BOT))
 
-# Standard 200 mm boxes.
-WALLS["BoxScreen"]           = _bx("screen",      (0.0, MAIN_Y, Z_SCREEN),        0.0,     0.0)
-WALLS["BoxCameras"]          = _bx("cameras",     (0.0, MAIN_Y, Z_CAM),           0.0,     0.0)
-WALLS["BoxComms"]            = _bx("comms",       (0.0, MAIN_Y, Z_COMMS),         0.0,     0.0)
-WALLS["BoxTurrets"]          = _bx("turrets",     (-X_SIDE, MAIN_Y, Z_WEAPONS),   0.0,     0.0)
-WALLS["BoxMissiles"]         = _bx("missiles",    ( X_SIDE, MAIN_Y, Z_WEAPONS),   0.0,     0.0)
-WALLS["BoxHardpoint1"]       = _bx("hardpoint", (-HP_X, HP_Y, HP_Z_TOP),  HP_YAW, 0.0)
-WALLS["BoxHardpoint2"]       = _bx("hardpoint", (-HP_X, HP_Y, HP_Z_BOT),  HP_YAW, 0.0)
-WALLS["BoxHardpoint3"]       = _bx("hardpoint", ( HP_X, HP_Y, HP_Z_TOP), -HP_YAW, 0.0)
-WALLS["BoxHardpoint4"]       = _bx("hardpoint", ( HP_X, HP_Y, HP_Z_BOT), -HP_YAW, 0.0)
-WALLS["BoxEngineering"]      = _bx("engineering",     (0.0,         ENG_Y, ENG_Z), 0.0, ENG_TILT)
-WALLS["BoxEngineeringLeft"]  = _bx("engineering_ext", (-_eng_ext_x, ENG_Y, ENG_Z), 0.0, ENG_TILT)
-WALLS["BoxEngineeringRight"] = _bx("engineering_ext", ( _eng_ext_x, ENG_Y, ENG_Z), 0.0, ENG_TILT)
+# HOTAS / touchscreen rear extension — bottom plate + rear wall extending to
+# MAIN_Y + BOX_D so the lower console has a flat back aligned with the main boxes.
+_full_ts_w = 2.0 * _hotas_outer_x
+WALLS["TsBottomExt"] = Part.makeBox(
+    _full_ts_w, BOX_D, PLY_T,
+    App.Vector(-_hotas_outer_x, MAIN_Y, TS_Z_BOT))
+WALLS["TsRearWall"] = Part.makeBox(
+    _full_ts_w, PLY_T, TS_TOP_Z - TS_Z_BOT,
+    App.Vector(-_hotas_outer_x, MAIN_Y + BOX_D - PLY_T, TS_Z_BOT))
 
-# Propulsion/FTL: outward shelves at TS_TOP_Z so hardpoint boxes sit on them.
-WALLS["PropulsionShelf"] = _hardpoint_shelf(-1)
-WALLS["FtlShelf"]        = _hardpoint_shelf(1)
+# --- Standard 200 mm boxes ---
+WALLS["BoxScreen"]     = _bx("screen",   (0.0,    MAIN_Y, Z_SCREEN),       0.0,    0.0)
+WALLS["BoxCameras"]    = _bx("cameras",  (0.0,    MAIN_Y, Z_CAM),          0.0,    0.0)
+WALLS["BoxComms"]      = _bx("comms",    (0.0,    MAIN_Y, Z_COMMS),        0.0,    0.0)
+WALLS["BoxTurrets"]    = _bx("turrets",  (-X_SIDE, MAIN_Y, Z_WEAPONS),     0.0,    0.0)
+WALLS["BoxMissiles"]   = _bx("missiles", ( X_SIDE, MAIN_Y, Z_WEAPONS),     0.0,    0.0)
+WALLS["BoxHardpoint1"] = _bx("hardpoint", (-HP_X, HP_Y, HP_Z_TOP),  HP_YAW, 0.0)
+WALLS["BoxHardpoint2"] = _bx("hardpoint", (-HP_X, HP_Y, HP_Z_BOT),  HP_YAW, 0.0)
+WALLS["BoxHardpoint3"] = _bx("hardpoint", ( HP_X, HP_Y, HP_Z_TOP), -HP_YAW, 0.0)
+WALLS["BoxHardpoint4"] = _bx("hardpoint", ( HP_X, HP_Y, HP_Z_BOT), -HP_YAW, 0.0)
+
+# Turret/missile outer-to-hardpoint fill: solid rectangular block that closes
+# the visible gap between the turret box outer wall and the hardpoint boxes,
+# forming a continuous solid block across the full build width.
+def _turret_hp_fill(sign):
+    x_inner = sign * _pivot_x
+    x_outer = _hp_outer_bottom(sign)[0]
+    x_lo, x_hi = sorted([x_inner, x_outer])
+    return Part.makeBox(x_hi - x_lo, BOX_D, ENG_TOP_Z - TS_TOP_Z,
+                        App.Vector(x_lo, MAIN_Y, TS_TOP_Z))
+
+WALLS["TurretsHpFillLeft"]  = _turret_hp_fill(-1)
+WALLS["TurretsHpFillRight"] = _turret_hp_fill(1)
+
+# Engineering wedge: triangular prism (flat top), full group width.
+# Side profile: (ENG_TOP_Y, TS_TOP_Z) → (ENG_TOP_Y, ENG_FAR_Z) → (MAIN_Y+BOX_D, ENG_FAR_Z)
+# Front edge at ENG_TOP_Y is the full height; top is flat at ENG_FAR_Z; back at MAIN_Y+BOX_D.
+def _eng_wedge():
+    pts = [
+        App.Vector(0.0, ENG_TOP_Y,       TS_TOP_Z),
+        App.Vector(0.0, ENG_TOP_Y,       ENG_FAR_Z),
+        App.Vector(0.0, MAIN_Y + BOX_D,  ENG_FAR_Z),
+        App.Vector(0.0, ENG_TOP_Y,       TS_TOP_Z),
+    ]
+    face  = Part.Face(Part.makePolygon(pts))
+    solid = face.extrude(App.Vector(_MAIN_GROUP_W, 0.0, 0.0))
+    solid.translate(App.Vector(-ENG_HALF_W, 0.0, 0.0))
+    return solid
+
+WALLS["EngBox"] = _eng_wedge()
+
+# EngFill boxes: solid bounding-box fills replacing the thin triangular connectors
+# between the engineering outer edge and the top hardpoint outer corner.
+def _eng_fill_box(sign):
+    pts   = [(sign * ENG_HALF_W, ENG_TOP_Y, ENG_TOP_Z),
+             (sign * ENG_HALF_W, ENG_FAR_Y, ENG_FAR_Z),
+             _hp_outer_top(sign)]
+    xs    = [p[0] for p in pts]
+    ys    = [p[1] for p in pts]
+    zs    = [p[2] for p in pts]
+    dx    = max(max(xs) - min(xs), PLY_T)
+    dy    = max(max(ys) - min(ys), PLY_T)
+    dz    = max(max(zs) - min(zs), PLY_T)
+    return Part.makeBox(dx, dy, dz, App.Vector(min(xs), min(ys), min(zs)))
+
+WALLS["EngLeftFillBox"]  = _eng_fill_box(-1)
+WALLS["EngRightFillBox"] = _eng_fill_box(1)
+
+# Propulsion/FTL lower box: extends the wing panels down to desk level (TS_Z_BOT)
+# with back wall aligned to MAIN_Y + BOX_D, matching the weapons/turret boxes above.
+def _prop_ftl_lower(sign):
+    x_inner = sign * _hotas_outer_x
+    x_outer = sign * _pivot_x
+    x_lo, x_hi = sorted([x_inner, x_outer])
+    return Part.makeBox(x_hi - x_lo, BOX_D, TS_TOP_Z - TS_Z_BOT,
+                        App.Vector(x_lo, MAIN_Y, TS_Z_BOT))
+
+WALLS["PropulsionLower"] = _prop_ftl_lower(-1)
+WALLS["FtlLower"]        = _prop_ftl_lower(1)
 
 
 # ================================================================ EXPLODE DIALOG
@@ -1129,14 +1166,16 @@ _EXPLODE_ORIGIN = App.Vector(0.0, 0.0, EYE_Z)
 # (group_name, layout_members, walls_members)
 GROUPS = [
     ("EngLeftFill",      ["PanelEngineeringLeft"],
-                         ["EngLeftFill", "BoxEngineeringLeft"]),
+                         ["EngLeftFillBox"]),
     ("Engineering",      ["PanelEngineering"],
-                         ["BoxEngineering"]),
+                         ["EngBox"]),
     ("EngRightFill",     ["PanelEngineeringRight"],
-                         ["EngRightFill", "BoxEngineeringRight"]),
-    ("Hardpoint1",       ["PanelHardpoint1"],        ["BoxHardpoint1"]),
+                         ["EngRightFillBox"]),
+    ("Hardpoint1",       ["PanelHardpoint1"],
+                         ["BoxHardpoint1", "TurretsHpFillLeft"]),
     ("Hardpoint2",       ["PanelHardpoint2"],        ["BoxHardpoint2"]),
-    ("Hardpoint3",       ["PanelHardpoint3"],        ["BoxHardpoint3"]),
+    ("Hardpoint3",       ["PanelHardpoint3"],
+                         ["BoxHardpoint3", "TurretsHpFillRight"]),
     ("Hardpoint4",       ["PanelHardpoint4"],        ["BoxHardpoint4"]),
     ("Turrets",          ["PanelTurrets"],           ["BoxTurrets"]),
     ("Missiles",         ["PanelMissiles"],          ["BoxMissiles"]),
@@ -1146,9 +1185,10 @@ GROUPS = [
                           "MountHotasLeft", "MountHotasRight"],
                          ["HotasLeftSide", "HotasLeftBack",
                           "HotasRightSide", "HotasRightBack",
-                          "TsBottom", "TsBack"]),
-    ("FTL",              [],  ["FtlBack", "FtlFront", "FtlShelf"]),
-    ("Propulsion",       [],  ["PropulsionBack", "PropulsionFront", "PropulsionShelf"]),
+                          "TsBottom", "TsBack",
+                          "TsBottomExt", "TsRearWall"]),
+    ("FTL",              [],  ["FtlBack", "FtlFront", "FtlLower"]),
+    ("Propulsion",       [],  ["PropulsionBack", "PropulsionFront", "PropulsionLower"]),
 ]
 
 # Pre-build all shapes so centroid computation (bounding-box) is available.
