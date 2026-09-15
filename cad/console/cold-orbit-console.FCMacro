@@ -79,6 +79,58 @@ D_MOUNT    = 4.5    # M4 clearance
 CUT_T = PLY_T * 4.0
 CUT_Z = -PLY_T
 
+# ================================================================ COLOUR
+COL_WOOD      = (0.76, 0.60, 0.42)   # pale birch ply
+COL_WOOD_DARK = (0.55, 0.40, 0.25)   # darker grain, optional variation -- not
+                                     # yet applied anywhere; one wood tone
+                                     # across everything for this pass.
+
+# ================================================================ COMPONENTS
+# Physical facts + placeholders for the two component types Phase 1 renders.
+# Square backlit button (cameras + touchscreen mode-select panels).
+BTN_SQUARE_FACE   = BTN_SQ    # cap face width/height (mm) -- same part as the
+                              # existing BTN_SQ panel cutout above, aliased
+                              # rather than re-stated so the two can't drift
+                              # apart independently.
+BTN_SQUARE_CUTOUT = 23.5      # panel hole diameter (mm) for the round body
+BTN_SQUARE_DEPTH  = 30.0      # body depth behind panel (mm) -- PLACEHOLDER, MEASURE
+COL_BTN_BODY      = (0.2, 0.2, 0.2)
+COL_BTN_BLUE      = (0.1, 0.4, 1.0)
+
+# Guarded toggle switch "Gebildet" (every ARM position, all panels).
+TOG_BODY_W    = 13.0   # body width (mm) -- PLACEHOLDER, MEASURE
+TOG_BODY_D    = 19.0   # body depth front-to-back (mm) -- PLACEHOLDER, MEASURE
+TOG_BODY_H    = 30.0   # body height behind panel (mm) -- PLACEHOLDER, MEASURE
+TOG_CUTOUT    = D_TOGGLE   # panel hole diameter (mm) -- aliased to the
+                           # existing D_TOGGLE cutout above (both 12.0mm);
+                           # PLACEHOLDER, MEASURE
+TOG_BAT_L     = 20.0   # bat lever length (mm) -- PLACEHOLDER, MEASURE
+TOG_GUARD_H   = 50.0   # guard height above panel when open (mm) -- PLACEHOLDER, MEASURE
+TOG_GUARD_W   = 20.0   # guard width (mm) -- PLACEHOLDER, MEASURE
+COL_TOG_BODY  = (0.15, 0.15, 0.15)   # black
+COL_TOG_BAT   = (0.75, 0.75, 0.80)   # chrome
+COL_TOG_GUARD = (0.85, 0.10, 0.10)   # red
+
+# Render components (buttons, switches) on top of the wood, or skip them for
+# a faster/cleaner model. A Qt Yes/No box rather than input(): the explode
+# dialog below is this macro's established interactive-prompt pattern, and
+# input() has no reliable stdin inside FreeCAD's GUI console. This can't
+# just reuse that same dialog instance, though - the WALLS section below
+# (propulsion_ftl_walls()) needs RENDER_COMPONENTS while building the
+# FTL/Propulsion TriPanels, long before the explode dialog runs - so this
+# prompt has to fire here, on its own, ahead of everything downstream that
+# gates on it.
+try:
+    from PySide2 import QtWidgets as _RcQt
+except ImportError:
+    from PySide import QtGui as _RcQt
+
+_rc_app = _RcQt.QApplication.instance() or _RcQt.QApplication([])
+RENDER_COMPONENTS = _RcQt.QMessageBox.question(
+    None, "Cold Orbit Console", "Render components (buttons, switches)?",
+    _RcQt.QMessageBox.Yes | _RcQt.QMessageBox.No,
+    _RcQt.QMessageBox.No) == _RcQt.QMessageBox.Yes
+
 # ================================================================ LETTERING
 SHOW_LABELS  = True     # False = plain panels, no etching
 ETCH_D       = 0.6      # etch pocket depth into the front face
@@ -306,6 +358,7 @@ class Face(object):
         self.w, self.h = SZ[key]
         self.cuts = []
         self.texts = []
+        self.components = []
 
     # -- cutouts --------------------------------------------------------
     def hole(self, x, y, dia):
@@ -327,6 +380,18 @@ class Face(object):
         for x in (-self.w / 2 + inset, self.w / 2 - inset):
             for y in (-self.h / 2 + inset, self.h / 2 - inset):
                 self.hole(x, y, D_MOUNT)
+
+    # -- components -------------------------------------------------------
+    # Registered here regardless of RENDER_COMPONENTS (cheap - just a list
+    # append); the flag is checked once, where the geometry actually gets
+    # built and placed.
+    def button_square(self, x, y):
+        """Register a square backlit button component centred on (x, y)."""
+        self.components.append(("button_square", x, y))
+
+    def toggle_guarded(self, x, y):
+        """Register a guarded toggle-switch component centred on (x, y)."""
+        self.components.append(("toggle_guarded", x, y))
 
     # -- lettering ------------------------------------------------------
     def text(self, x, y, string, cap_h=None, halign="center", valign="bottom"):
@@ -384,6 +449,51 @@ class Face(object):
         return blank.cut(Part.makeCompound(cuts))
 
 
+# ================================================================ COMPONENT GEOMETRY
+# Simplified solids for the two component types Phase 1 covers - enough to
+# check fit and show colour, not photorealistic. Built in a panel's own
+# local (x, y) coords, with the panel's front face at local z = PLY_T and
+# local +z pointing back at the player (see placement()) - so a component
+# behind the panel (into the enclosure) extends toward -z, and one proud of
+# the panel (toward the player) extends past +PLY_T. Callers reuse whatever
+# world transform already moves the panel itself; see component_shapes().
+def _button_square_shapes(x, y):
+    """Square backlit button: round body behind the panel (through the
+    BTN_SQUARE_CUTOUT hole), square cap proud of the front face."""
+    body = Part.makeCylinder(BTN_SQUARE_CUTOUT / 2.0, BTN_SQUARE_DEPTH,
+                             App.Vector(x, y, -BTN_SQUARE_DEPTH))
+    cap = Part.makeBox(BTN_SQUARE_FACE, BTN_SQUARE_FACE, 3.0,
+                       App.Vector(x - BTN_SQUARE_FACE / 2.0,
+                                  y - BTN_SQUARE_FACE / 2.0, PLY_T))
+    return [(body, COL_BTN_BODY), (cap, COL_BTN_BLUE)]
+
+
+def _toggle_guarded_shapes(x, y):
+    """Guarded toggle: black body behind the panel, chrome bat angled ~30
+    degrees toward ON, red guard standing upright (open/armed) proud of the
+    panel front face."""
+    body = Part.makeBox(TOG_BODY_W, TOG_BODY_D, TOG_BODY_H,
+                        App.Vector(x - TOG_BODY_W / 2.0, y - TOG_BODY_D / 2.0,
+                                   -TOG_BODY_H))
+    bat = Part.makeCylinder(2.0, TOG_BAT_L, App.Vector(x, y, PLY_T))
+    bat.rotate(App.Vector(x, y, PLY_T), App.Vector(1, 0, 0), 30.0)
+    guard = Part.makeBox(TOG_GUARD_W, 4.0, TOG_GUARD_H,
+                         App.Vector(x - TOG_GUARD_W / 2.0, y - 2.0, PLY_T))
+    return [(body, COL_TOG_BODY), (bat, COL_TOG_BAT), (guard, COL_TOG_GUARD)]
+
+
+_COMPONENT_BUILDERS = {
+    "button_square":  _button_square_shapes,
+    "toggle_guarded": _toggle_guarded_shapes,
+}
+
+
+def component_shapes(kind, x, y):
+    """(shape, ShapeColor) pairs, in local panel coords, for one registered
+    component instance."""
+    return _COMPONENT_BUILDERS[kind](x, y)
+
+
 def spread(n, pitch):
     """n evenly spaced coordinates centred on zero."""
     return [(i - (n - 1) / 2.0) * pitch for i in range(n)]
@@ -407,6 +517,7 @@ def f_cameras():
     xs = spread(7, 90.0)
     for x, name in zip(xs, L["cameras_views"]):
         f.square(x, 0.0, BTN_SQ)
+        f.button_square(x, 0.0)
         f.text_above(x, 0.0, BTN_SQ / 2.0, name)
     f.title(L["cameras_title"], TEXT_H_HDR)
     f.mounts()
@@ -464,6 +575,7 @@ def f_turrets():
         f.text(cx, 199.0, hdr, TEXT_H_HDR, valign="top")
 
         f.hole(cx, rows["arm"], D_TOGGLE)
+        f.toggle_guarded(cx, rows["arm"])
         f.text_above(cx, rows["arm"], D_TOGGLE / 2.0, L["turrets_arm"])
 
         f.slot(cx, rows["ammo"], 26, 10)
@@ -506,6 +618,7 @@ def f_missiles():
         f.text(cx, 199.0, hdr, TEXT_H_HDR, valign="top")
 
         f.hole(cx, rows["arm"], D_TOGGLE)
+        f.toggle_guarded(cx, rows["arm"])
         f.text_above(cx, rows["arm"], D_TOGGLE / 2.0, L["missiles_arm"])
 
         f.hole(cx - 34, rows["ammo"], D_BUTTON)
@@ -552,6 +665,7 @@ def f_ts_modes():
     xs = spread(8, 44.0)
     for x, name in zip(xs, L["ts_modes_modes"]):
         f.square(x, 0.0, BTN_SQ)
+        f.button_square(x, 0.0)
         f.text_above(x, 0.0, BTN_SQ / 2.0, name)
     f.title(L["ts_modes_title"], TEXT_H_HDR)
     f.mounts()
@@ -580,6 +694,7 @@ def f_hardpoint():
     L = LABELS
     f.title(L["hardpoint_title"], TEXT_H_HDR, inset=3.0)
     f.hole(-100, 130, D_TOGGLE)         # guarded arm
+    f.toggle_guarded(-100, 130)
     f.text_above(-100, 130, D_TOGGLE / 2.0, L["hardpoint_arm"])
     f.slot(35, 130, 92, 20)             # 16x1 module-ID LCD
     f.text_above(35, 130, 10.0, L["hardpoint_lcd"])
@@ -913,14 +1028,21 @@ class TriPanel(Face):
         self._u, self._v, self._n = u, v, n
         self.cuts = []
         self.texts = []
+        self.components = []
+
+    def matrix(self):
+        """Local (u, v, n) -> world transform - the same one solid() applies
+        to the panel blank, exposed so component geometry (built in the same
+        local x/y coords as holes and text) can be placed onto this
+        arbitrarily-oriented triangle too."""
+        return App.Matrix(self._u.x, self._v.x, self._n.x, self._origin.x,
+                          self._u.y, self._v.y, self._n.y, self._origin.y,
+                          self._u.z, self._v.z, self._n.z, self._origin.z,
+                          0, 0, 0, 1)
 
     def solid(self):
         blank = super(TriPanel, self).solid().copy()
-        M = App.Matrix(self._u.x, self._v.x, self._n.x, self._origin.x,
-                       self._u.y, self._v.y, self._n.y, self._origin.y,
-                       self._u.z, self._v.z, self._n.z, self._origin.z,
-                       0, 0, 0, 1)
-        blank.transformShape(M)
+        blank.transformShape(self.matrix())
         return blank.common(_tri_prism(self.p1, self.p2, self.p3))
 
 
@@ -940,6 +1062,7 @@ class TriPanel(Face):
 def _ftl_back_controls(f):
     L = LABELS
     f.hole(-30, 110, D_TOGGLE)
+    f.toggle_guarded(-30, 110)
     f.text_above(-30, 110, D_TOGGLE / 2.0, L["ftl_arm"])
     f.hole(-55, 0, D_BTN_LG)
     f.text_above(-55, 0, D_BTN_LG / 2.0, L["ftl_vector"])
@@ -973,6 +1096,7 @@ def _prop_front_controls(f):
     L = LABELS
     f.text(0, 175, L["prop_title"], TEXT_H_TITLE, valign="top")
     f.hole(-60, 140, D_TOGGLE)          # arm
+    f.toggle_guarded(-60, 140)
     f.text_above(-60, 140, D_TOGGLE / 2.0, L["prop_arm"])
     f.hole(60, 140, D_KNOB)             # ignition
     f.text_above(60, 140, D_KNOB / 2.0, L["prop_ignition"])
@@ -984,6 +1108,12 @@ def _prop_front_controls(f):
     f.text_above(32, -60, 7.0, L["prop_temp"])
 
 
+# Wall-object names that aren't wood (component geometry riding on a
+# TriPanel) map here to their own ShapeColor; anything absent from this dict
+# defaults to COL_WOOD in the BUILD section below.
+WALL_COMPONENT_COLORS = {}
+
+
 def propulsion_ftl_walls(sign, name, back_controls, front_controls):
     p1 = (sign * _hotas_outer_x, TS_Y_BOT, TS_Z_BOT)
     p2 = _hp_outer_bottom(sign)
@@ -992,16 +1122,31 @@ def propulsion_ftl_walls(sign, name, back_controls, front_controls):
     back, front = TriPanel(p1, p4, p3), TriPanel(p1, p3, p2)
     back_controls(back)
     front_controls(front)
-    return {name + "Back": back.solid(), name + "Front": front.solid()}
+    result = {name + "Back": back.solid(), name + "Front": front.solid()}
+    component_keys = []
+    if RENDER_COMPONENTS:
+        for panel, tag in ((back, "Back"), (front, "Front")):
+            M = panel.matrix()
+            for ci, (kind, cx, cy) in enumerate(panel.components):
+                for si, (shape, colour) in enumerate(component_shapes(kind, cx, cy)):
+                    s = shape.copy()
+                    s.transformShape(M)
+                    key = "%s%sComp%d_%d" % (name, tag, ci, si)
+                    result[key] = s
+                    WALL_COMPONENT_COLORS[key] = colour
+                    component_keys.append(key)
+    return result, component_keys
 
 
 WALLS = {}
 WALLS.update(hotas_walls(-1, "HotasLeft"))
 WALLS.update(hotas_walls(1, "HotasRight"))
-WALLS.update(propulsion_ftl_walls(-1, "Propulsion",
-                                  _prop_back_controls, _prop_front_controls))
-WALLS.update(propulsion_ftl_walls(1, "Ftl",
-                                  _ftl_back_controls, _ftl_front_controls))
+_prop_walls, _PROP_COMPONENT_KEYS = propulsion_ftl_walls(
+    -1, "Propulsion", _prop_back_controls, _prop_front_controls)
+WALLS.update(_prop_walls)
+_ftl_walls, _FTL_COMPONENT_KEYS = propulsion_ftl_walls(
+    1, "Ftl", _ftl_back_controls, _ftl_front_controls)
+WALLS.update(_ftl_walls)
 
 # ================================================================ BOX ENCLOSURES
 
@@ -1335,16 +1480,24 @@ GROUPS = [
                           "TsBottomExt", "TsRearWall"]),
     ("FTL",              [],  ["FtlBack", "FtlFront", "FtlLower",
                                "FtlOuter", "FtlHpSide", "FtlHpRear",
-                               "FtlNotch", "FtlRear", "FtlInboard"]),
+                               "FtlNotch", "FtlRear", "FtlInboard"]
+                              + _FTL_COMPONENT_KEYS),
     ("Propulsion",       [],  ["PropulsionBack", "PropulsionFront", "PropulsionLower",
                                "PropulsionOuter", "PropulsionHpSide", "PropulsionHpRear",
-                               "PropulsionNotch", "PropulsionRear", "PropulsionInboard"]),
+                               "PropulsionNotch", "PropulsionRear", "PropulsionInboard"]
+                              + _PROP_COMPONENT_KEYS),
 ]
 
 # Pre-build all shapes so centroid computation (bounding-box) is available.
+# The Face instance itself is kept too (not just its solid()) so its
+# registered .components can be placed in the BUILD loop below, reusing the
+# same (pos, yaw, tilt) placement as the panel they're mounted on.
 _layout_built = {}
+_layout_faces = {}
 for name, builder, pos, yaw, tilt in LAYOUT:
-    _layout_built[name] = (builder().solid(), pos, yaw, tilt)
+    face_obj = builder()
+    _layout_built[name] = (face_obj.solid(), pos, yaw, tilt)
+    _layout_faces[name] = face_obj
 
 _layout_pos = {name: App.Vector(*pos) for name, _, pos, __, ___ in LAYOUT}
 
@@ -1375,16 +1528,31 @@ for gname, layout_members, walls_members in GROUPS:
     for name in layout_members:
         shape, pos, yaw, tilt = _layout_built[name]
         epos = App.Vector(*pos) + offset
+        panel_placement = placement((epos.x, epos.y, epos.z), yaw, tilt)
         obj = doc.addObject("Part::Feature", name)
         obj.Shape = shape
-        obj.Placement = placement((epos.x, epos.y, epos.z), yaw, tilt)
+        obj.Placement = panel_placement
+        if obj.ViewObject:
+            obj.ViewObject.ShapeColor = COL_WOOD
         _objs[name] = obj
+
+        if RENDER_COMPONENTS:
+            for ci, (kind, cx, cy) in enumerate(_layout_faces[name].components):
+                for si, (cshape, colour) in enumerate(component_shapes(kind, cx, cy)):
+                    cobj = doc.addObject("Part::Feature", "%s_Comp%d_%d" % (name, ci, si))
+                    cobj.Shape = cshape
+                    cobj.Placement = panel_placement
+                    if cobj.ViewObject:
+                        cobj.ViewObject.ShapeColor = colour
+                    _objs[cobj.Name] = cobj
 
     for name in walls_members:
         moved = WALLS[name].copy()
         moved.translate(offset)
         obj = doc.addObject("Part::Feature", name)
         obj.Shape = moved
+        if obj.ViewObject:
+            obj.ViewObject.ShapeColor = WALL_COMPONENT_COLORS.get(name, COL_WOOD)
         _objs[name] = obj
 
 doc.recompute()
