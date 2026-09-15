@@ -87,15 +87,22 @@ COL_WOOD_DARK = (0.55, 0.40, 0.25)   # darker grain, optional variation -- not
 
 # ================================================================ COMPONENTS
 # Physical facts + placeholders for the two component types Phase 1 renders.
-# Square backlit button (cameras + touchscreen mode-select panels).
-BTN_SQUARE_FACE   = BTN_SQ    # cap face width/height (mm) -- same part as the
-                              # existing BTN_SQ panel cutout above, aliased
-                              # rather than re-stated so the two can't drift
-                              # apart independently.
+# Square backlit button (cameras, touchscreen mode-select, comms panels).
+# NOTE: the panel cutout is BTN_SQUARE_CUTOUT (round, sized to the
+# component's actual body) - BTN_SQUARE_FACE/BTN_SQ is the visible cap only,
+# which sits proud and overlaps the wood around the smaller round hole. The
+# panels' own hole-cutting code used to cut BTN_SQ (34mm) square holes
+# directly - that was a guide sized to the cap, not the real part, and has
+# been corrected to cut BTN_SQUARE_CUTOUT instead (see f_cameras/f_ts_modes/
+# f_comms below).
+BTN_SQUARE_FACE   = BTN_SQ    # cap face width/height (mm) -- aliased to the
+                              # pre-existing BTN_SQ constant so the two can't
+                              # drift apart independently.
 BTN_SQUARE_CUTOUT = 23.5      # panel hole diameter (mm) for the round body
 BTN_SQUARE_DEPTH  = 30.0      # body depth behind panel (mm) -- PLACEHOLDER, MEASURE
 COL_BTN_BODY      = (0.2, 0.2, 0.2)
-COL_BTN_BLUE      = (0.1, 0.4, 1.0)
+COL_BTN_BLUE      = (0.1, 0.4, 1.0)    # cameras / ts_modes cap colour
+COL_BTN_WHITE     = (1.0, 1.0, 1.0)    # comms cap colour -- same button, no backlight colour confirmed yet
 
 # Guarded toggle switch "Gebildet" (every ARM position, all panels).
 TOG_BODY_W    = 13.0   # body width (mm) -- PLACEHOLDER, MEASURE
@@ -385,13 +392,14 @@ class Face(object):
     # Registered here regardless of RENDER_COMPONENTS (cheap - just a list
     # append); the flag is checked once, where the geometry actually gets
     # built and placed.
-    def button_square(self, x, y):
-        """Register a square backlit button component centred on (x, y)."""
-        self.components.append(("button_square", x, y))
+    def button_square(self, x, y, cap_colour=None):
+        """Register a square backlit button component centred on (x, y).
+        `cap_colour` overrides COL_BTN_BLUE - e.g. comms' white caps."""
+        self.components.append(("button_square", x, y, cap_colour))
 
     def toggle_guarded(self, x, y):
         """Register a guarded toggle-switch component centred on (x, y)."""
-        self.components.append(("toggle_guarded", x, y))
+        self.components.append(("toggle_guarded", x, y, None))
 
     # -- lettering ------------------------------------------------------
     def text(self, x, y, string, cap_h=None, halign="center", valign="bottom"):
@@ -457,7 +465,7 @@ class Face(object):
 # behind the panel (into the enclosure) extends toward -z, and one proud of
 # the panel (toward the player) extends past +PLY_T. Callers reuse whatever
 # world transform already moves the panel itself; see component_shapes().
-def _button_square_shapes(x, y):
+def _button_square_shapes(x, y, cap_colour):
     """Square backlit button: round body behind the panel (through the
     BTN_SQUARE_CUTOUT hole), square cap proud of the front face."""
     body = Part.makeCylinder(BTN_SQUARE_CUTOUT / 2.0, BTN_SQUARE_DEPTH,
@@ -465,10 +473,10 @@ def _button_square_shapes(x, y):
     cap = Part.makeBox(BTN_SQUARE_FACE, BTN_SQUARE_FACE, 3.0,
                        App.Vector(x - BTN_SQUARE_FACE / 2.0,
                                   y - BTN_SQUARE_FACE / 2.0, PLY_T))
-    return [(body, COL_BTN_BODY), (cap, COL_BTN_BLUE)]
+    return [(body, COL_BTN_BODY), (cap, cap_colour or COL_BTN_BLUE)]
 
 
-def _toggle_guarded_shapes(x, y):
+def _toggle_guarded_shapes(x, y, _extra):
     """Guarded toggle: black body behind the panel, chrome bat angled ~30
     degrees toward ON, red guard standing upright (open/armed) proud of the
     panel front face."""
@@ -488,10 +496,11 @@ _COMPONENT_BUILDERS = {
 }
 
 
-def component_shapes(kind, x, y):
+def component_shapes(kind, x, y, extra=None):
     """(shape, ShapeColor) pairs, in local panel coords, for one registered
-    component instance."""
-    return _COMPONENT_BUILDERS[kind](x, y)
+    component instance. `extra` is the per-instance override registered
+    alongside (x, y) - e.g. button_square's cap_colour."""
+    return _COMPONENT_BUILDERS[kind](x, y, extra)
 
 
 def spread(n, pitch):
@@ -516,7 +525,7 @@ def f_cameras():
     L = LABELS
     xs = spread(7, 90.0)
     for x, name in zip(xs, L["cameras_views"]):
-        f.square(x, 0.0, BTN_SQ)
+        f.hole(x, 0.0, BTN_SQUARE_CUTOUT)
         f.button_square(x, 0.0)
         f.text_above(x, 0.0, BTN_SQ / 2.0, name)
     f.title(L["cameras_title"], TEXT_H_HDR)
@@ -541,11 +550,14 @@ def f_comms():
     f.text_above(-294, 28, D_KNOB / 2.0, L["comms_volume"])
 
     # Nav cluster: Select outboard, Up/Down stacked to the right of it.
-    f.square(-214, 0, BTN_SQ)           # select
+    f.hole(-214, 0, BTN_SQUARE_CUTOUT)  # select
+    f.button_square(-214, 0, COL_BTN_WHITE)
     f.text_above(-214, 0, sq, L["comms_select"])
-    f.square(-164, 22, BTN_SQ)          # up
+    f.hole(-164, 22, BTN_SQUARE_CUTOUT) # up
+    f.button_square(-164, 22, COL_BTN_WHITE)
     f.text_above(-164, 22, sq, L["comms_up"])
-    f.square(-164, -22, BTN_SQ)         # down
+    f.hole(-164, -22, BTN_SQUARE_CUTOUT) # down
+    f.button_square(-164, -22, COL_BTN_WHITE)
     f.text_below(-164, -22, sq, L["comms_down"])
 
     f.slot(-14, 0, 190, 42)             # comms LCD
@@ -555,9 +567,11 @@ def f_comms():
     f.slot(145, 0, 90, 32)              # 7-seg clock
     f.text_above(145, 0, 16.0, L["comms_clock"])
 
-    f.square(285, 22, BTN_SQ)           # master warn
+    f.hole(285, 22, BTN_SQUARE_CUTOUT)  # master warn
+    f.button_square(285, 22, COL_BTN_WHITE)
     f.text_above(285, 22, sq, L["comms_warn"])
-    f.square(285, -22, BTN_SQ)          # master caution
+    f.hole(285, -22, BTN_SQUARE_CUTOUT) # master caution
+    f.button_square(285, -22, COL_BTN_WHITE)
     f.text_below(285, -22, sq, L["comms_caution"])
 
     f.title(L["comms_title"], TEXT_H_HDR, top=False)
@@ -664,7 +678,7 @@ def f_ts_modes():
     L = LABELS
     xs = spread(8, 44.0)
     for x, name in zip(xs, L["ts_modes_modes"]):
-        f.square(x, 0.0, BTN_SQ)
+        f.hole(x, 0.0, BTN_SQUARE_CUTOUT)
         f.button_square(x, 0.0)
         f.text_above(x, 0.0, BTN_SQ / 2.0, name)
     f.title(L["ts_modes_title"], TEXT_H_HDR)
@@ -1127,8 +1141,8 @@ def propulsion_ftl_walls(sign, name, back_controls, front_controls):
     if RENDER_COMPONENTS:
         for panel, tag in ((back, "Back"), (front, "Front")):
             M = panel.matrix()
-            for ci, (kind, cx, cy) in enumerate(panel.components):
-                for si, (shape, colour) in enumerate(component_shapes(kind, cx, cy)):
+            for ci, (kind, cx, cy, extra) in enumerate(panel.components):
+                for si, (shape, colour) in enumerate(component_shapes(kind, cx, cy, extra)):
                     s = shape.copy()
                     s.transformShape(M)
                     key = "%s%sComp%d_%d" % (name, tag, ci, si)
@@ -1537,8 +1551,8 @@ for gname, layout_members, walls_members in GROUPS:
         _objs[name] = obj
 
         if RENDER_COMPONENTS:
-            for ci, (kind, cx, cy) in enumerate(_layout_faces[name].components):
-                for si, (cshape, colour) in enumerate(component_shapes(kind, cx, cy)):
+            for ci, (kind, cx, cy, extra) in enumerate(_layout_faces[name].components):
+                for si, (cshape, colour) in enumerate(component_shapes(kind, cx, cy, extra)):
                     cobj = doc.addObject("Part::Feature", "%s_Comp%d_%d" % (name, ci, si))
                     cobj.Shape = cshape
                     cobj.Placement = panel_placement
