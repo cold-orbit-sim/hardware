@@ -510,13 +510,13 @@ def _toggle_guarded_shapes(x, y, _extra):
     bat.rotate(App.Vector(x, y, PLY_T), App.Vector(1, 0, 0), 30.0)
 
     # Guard: built hanging straight down from its hinge (flush against the
-    # panel), then tilted -35 degrees about that hinge so the free end lifts
-    # forward off the panel - enough to clear the bat it's covering, without
-    # swinging so far it reads as open.
+    # panel), then tilted -50 degrees about that hinge so the free end lifts
+    # clearly forward, off the panel face - a shallower angle read as flush
+    # from most view angles instead of visibly standing off the surface.
     guard = Part.makeBox(TOG_GUARD_W, TOG_GUARD_H, 4.0,
                          App.Vector(x - TOG_GUARD_W / 2.0, y, PLY_T + 2.0))
     guard_hinge = App.Vector(x, y + TOG_GUARD_H, PLY_T + 2.0)
-    guard.rotate(guard_hinge, App.Vector(1, 0, 0), -35.0)
+    guard.rotate(guard_hinge, App.Vector(1, 0, 0), -50.0)
     return [(body, COL_TOG_BODY), (bat, COL_TOG_BAT), (guard, COL_TOG_GUARD)]
 
 
