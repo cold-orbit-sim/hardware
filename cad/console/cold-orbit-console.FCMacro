@@ -112,10 +112,10 @@ TOG_CUTOUT    = D_TOGGLE   # panel hole diameter (mm) -- aliased to the
                            # existing D_TOGGLE cutout above (both 12.0mm);
                            # PLACEHOLDER, MEASURE
 TOG_BAT_L     = 20.0   # bat lever length (mm) -- PLACEHOLDER, MEASURE
-TOG_GUARD_H   = 50.0   # guard height above panel when open (mm) -- PLACEHOLDER, MEASURE
+TOG_GUARD_H   = 50.0   # guard flap length, hinge to tip (mm) -- PLACEHOLDER, MEASURE
 TOG_GUARD_W   = 20.0   # guard width (mm) -- PLACEHOLDER, MEASURE
 COL_TOG_BODY  = (0.15, 0.15, 0.15)   # black
-COL_TOG_BAT   = (0.75, 0.75, 0.80)   # chrome
+COL_TOG_BAT   = (0.7, 0.7, 0.7)      # grey
 COL_TOG_GUARD = (0.85, 0.10, 0.10)   # red
 
 # ================================================================ STARTUP DIALOG
@@ -500,16 +500,23 @@ def _button_square_shapes(x, y, cap_colour):
 
 
 def _toggle_guarded_shapes(x, y, _extra):
-    """Guarded toggle: black body behind the panel, chrome bat angled ~30
-    degrees toward ON, red guard standing upright (open/armed) proud of the
-    panel front face."""
+    """Guarded toggle, shown in its safe/OFF state: black body behind the
+    panel, grey bat angled down toward OFF, red guard flap hinged near the
+    top and angled down over the toggle."""
     body = Part.makeBox(TOG_BODY_W, TOG_BODY_D, TOG_BODY_H,
                         App.Vector(x - TOG_BODY_W / 2.0, y - TOG_BODY_D / 2.0,
                                    -TOG_BODY_H))
     bat = Part.makeCylinder(2.0, TOG_BAT_L, App.Vector(x, y, PLY_T))
     bat.rotate(App.Vector(x, y, PLY_T), App.Vector(1, 0, 0), 30.0)
-    guard = Part.makeBox(TOG_GUARD_W, 4.0, TOG_GUARD_H,
-                         App.Vector(x - TOG_GUARD_W / 2.0, y - 2.0, PLY_T))
+
+    # Guard: built hanging straight down from its hinge (flush against the
+    # panel), then tilted -35 degrees about that hinge so the free end lifts
+    # forward off the panel - enough to clear the bat it's covering, without
+    # swinging so far it reads as open.
+    guard = Part.makeBox(TOG_GUARD_W, TOG_GUARD_H, 4.0,
+                         App.Vector(x - TOG_GUARD_W / 2.0, y, PLY_T + 2.0))
+    guard_hinge = App.Vector(x, y + TOG_GUARD_H, PLY_T + 2.0)
+    guard.rotate(guard_hinge, App.Vector(1, 0, 0), -35.0)
     return [(body, COL_TOG_BODY), (bat, COL_TOG_BAT), (guard, COL_TOG_GUARD)]
 
 
