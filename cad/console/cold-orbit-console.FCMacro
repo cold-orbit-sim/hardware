@@ -80,9 +80,9 @@ CUT_T = PLY_T * 4.0
 CUT_Z = -PLY_T
 
 # ================================================================ COLOUR
-COL_WOOD      = (0.76, 0.60, 0.42)   # pale birch ply
-COL_WOOD_DARK = (0.55, 0.40, 0.25)   # darker grain, optional variation -- not
-                                     # yet applied anywhere; one wood tone
+COL_WOOD      = (0.55, 0.55, 0.55)   # painted grey - not bare ply
+COL_WOOD_DARK = (0.35, 0.35, 0.35)   # darker grey, optional variation -- not
+                                     # yet applied anywhere; one grey tone
                                      # across everything for this pass.
 
 # ================================================================ COMPONENTS
@@ -118,25 +118,47 @@ COL_TOG_BODY  = (0.15, 0.15, 0.15)   # black
 COL_TOG_BAT   = (0.75, 0.75, 0.80)   # chrome
 COL_TOG_GUARD = (0.85, 0.10, 0.10)   # red
 
-# Render components (buttons, switches) on top of the wood, or skip them for
-# a faster/cleaner model. A Qt Yes/No box rather than input(): the explode
-# dialog below is this macro's established interactive-prompt pattern, and
-# input() has no reliable stdin inside FreeCAD's GUI console. This can't
-# just reuse that same dialog instance, though - the WALLS section below
-# (propulsion_ftl_walls()) needs RENDER_COMPONENTS while building the
-# FTL/Propulsion TriPanels, long before the explode dialog runs - so this
-# prompt has to fire here, on its own, ahead of everything downstream that
-# gates on it.
+# ================================================================ STARTUP DIALOG
+# One prompt, up front, for both run-time choices this macro asks about:
+# whether to render components (buttons, switches) and how far to separate
+# panels for an exploded view. They used to fire at two different points -
+# this one, RENDER_COMPONENTS, had to run before everything downstream that
+# gates on it (the WALLS section below reads it while building the
+# FTL/Propulsion TriPanels), while the explode prompt ran much later, right
+# before panels are actually instantiated. Combined here, both are decided
+# before any geometry gets built, which is also the earliest either one
+# could possibly run.
 try:
-    from PySide2 import QtWidgets as _RcQt
+    from PySide2 import QtWidgets, QtCore
 except ImportError:
-    from PySide import QtGui as _RcQt
+    from PySide import QtGui as QtWidgets, QtCore
 
-_rc_app = _RcQt.QApplication.instance() or _RcQt.QApplication([])
-RENDER_COMPONENTS = _RcQt.QMessageBox.question(
-    None, "Cold Orbit Console", "Render components (buttons, switches)?",
-    _RcQt.QMessageBox.Yes | _RcQt.QMessageBox.No,
-    _RcQt.QMessageBox.No) == _RcQt.QMessageBox.Yes
+_qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+_dlg  = QtWidgets.QDialog()
+_dlg.setWindowTitle("Cold Orbit Console")
+_dlg_box = QtWidgets.QVBoxLayout()
+_render_check = QtWidgets.QCheckBox("Render components (buttons, switches)")
+_sep_label = QtWidgets.QLabel("Panel separation: 0 mm")
+_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+_slider.setRange(0, 100)
+_slider.setValue(0)
+_slider.valueChanged.connect(lambda v: _sep_label.setText("Panel separation: %d mm" % v))
+_btns = QtWidgets.QDialogButtonBox(
+    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+_btns.accepted.connect(_dlg.accept)
+_btns.rejected.connect(_dlg.reject)
+_dlg_box.addWidget(_render_check)
+_dlg_box.addWidget(_sep_label)
+_dlg_box.addWidget(_slider)
+_dlg_box.addWidget(_btns)
+_dlg.setLayout(_dlg_box)
+
+if not _dlg.exec_():
+    raise SystemExit("Macro cancelled")
+
+RENDER_COMPONENTS = _render_check.isChecked()
+EXPLODE = float(_slider.value())          # mm of separation
+_EXPLODE_ORIGIN = App.Vector(0.0, 0.0, EYE_Z)
 
 # ================================================================ LETTERING
 SHOW_LABELS  = True     # False = plain panels, no etching
@@ -1435,38 +1457,9 @@ WALLS.update(_prop_ftl_uprights(-1, "Propulsion"))
 WALLS.update(_prop_ftl_uprights(1, "Ftl"))
 
 
-# ================================================================ EXPLODE DIALOG
-try:
-    from PySide2 import QtWidgets, QtCore
-except ImportError:
-    from PySide import QtGui as QtWidgets, QtCore
-
-_qapp = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-_dlg  = QtWidgets.QDialog()
-_dlg.setWindowTitle("Cold Orbit Console")
-_dlg_box = QtWidgets.QVBoxLayout()
-_sep_label = QtWidgets.QLabel("Panel separation: 0 mm")
-_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-_slider.setRange(0, 100)
-_slider.setValue(0)
-_slider.valueChanged.connect(lambda v: _sep_label.setText("Panel separation: %d mm" % v))
-_btns = QtWidgets.QDialogButtonBox(
-    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-_btns.accepted.connect(_dlg.accept)
-_btns.rejected.connect(_dlg.reject)
-_dlg_box.addWidget(_sep_label)
-_dlg_box.addWidget(_slider)
-_dlg_box.addWidget(_btns)
-_dlg.setLayout(_dlg_box)
-
-if not _dlg.exec_():
-    raise SystemExit("Macro cancelled")
-
-EXPLODE = float(_slider.value())          # mm of separation
-_EXPLODE_ORIGIN = App.Vector(0.0, 0.0, EYE_Z)
-
-
 # ================================================================ BUILD
+# RENDER_COMPONENTS and EXPLODE/_EXPLODE_ORIGIN are set by the combined
+# STARTUP DIALOG near the top of the file - see there.
 # Manufacturing groups - each explodes as a unit.
 # (group_name, layout_members, walls_members)
 GROUPS = [
